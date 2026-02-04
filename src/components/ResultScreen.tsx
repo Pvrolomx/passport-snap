@@ -62,11 +62,11 @@ export default function ResultScreen({
     img.onload = () => {
       // Passport open: 125mm × 88mm
       const pdf = new jsPDF({
-        orientation: "landscape",
+        orientation: "portrait",
         unit: "mm",
-        format: [125, 88],
+        format: [88, 125],
       });
-      pdf.addImage(displaySrc, "PNG", 0, 0, 125, 88);
+      pdf.addImage(displaySrc, "PNG", 0, 0, 88, 125);
       pdf.save(`passport-scan-${Date.now()}.pdf`);
     };
     img.src = displaySrc;
