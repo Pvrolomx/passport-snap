@@ -290,7 +290,7 @@ export default function ScannerApp() {
         ch.convertTo(chF, cv.CV_32F);
         // Larger blur = gentler normalization
         cv.GaussianBlur(chF, bgCh, new cv.Size(71, 71), 0);
-        cv.divide(chF, bgCh, normCh, 245.0); // 245 instead of 255 = slightly less white
+        cv.divide(chF, bgCh, normCh, 238.0); // softer whites
         normCh.convertTo(ch, cv.CV_8U);
         chF.delete(); bgCh.delete(); normCh.delete();
       }
@@ -299,12 +299,12 @@ export default function ScannerApp() {
 
       // 2. Slight contrast reduction: alpha < 1.0 softens, beta brightens slightly
       const contrasted = new cv.Mat();
-      result.convertTo(contrasted, -1, 0.95, 8);
+      result.convertTo(contrasted, -1, 0.90, 5);
       contrasted.copyTo(result);
       contrasted.delete();
 
       // 3. Very gentle sharpen
-      const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.3,0,-0.3,2.2,-0.3,0,-0.3,0]);
+      const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.2,0,-0.2,1.8,-0.2,0,-0.2,0]);
       const sharp = new cv.Mat();
       cv.filter2D(result, sharp, -1, kernel);
       sharp.copyTo(result);
