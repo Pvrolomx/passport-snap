@@ -281,30 +281,53 @@ export default function ScannerApp() {
   const enhanceImage = (cv: any, src: any): any => {
     const result = src.clone();
     try {
-      // 1. Gentle illumination normalization
+      // 1. Illumination normalization
       const channels = new cv.MatVector();
       cv.split(result, channels);
       for (let i = 0; i < 3; i++) {
         const ch = channels.get(i);
         const chF = new cv.Mat(); const bgCh = new cv.Mat(); const normCh = new cv.Mat();
         ch.convertTo(chF, cv.CV_32F);
-        // Larger blur = gentler normalization
         cv.GaussianBlur(chF, bgCh, new cv.Size(71, 71), 0);
-        cv.divide(chF, bgCh, normCh, 238.0); // softer whites
+        cv.divide(chF, bgCh, normCh, 238.0);
         normCh.convertTo(ch, cv.CV_8U);
         chF.delete(); bgCh.delete(); normCh.delete();
       }
       cv.merge(channels, result);
       channels.delete();
 
-      // 2. Slight contrast reduction: alpha < 1.0 softens, beta brightens slightly
+      // 2. White background boost: push light pixels whiter
+      // Convert to float, apply gamma < 1 to brighten highlights
+      const floatImg = new cv.Mat();
+      result.convertTo(floatImg, cv.CV_32F, 1.0 / 255.0);
+
+      // Custom curve: darks stay, lights get pushed to white
+      // Using power curve with gamma=0.7 — brightens highlights more than shadows
+      const curved = new cv.Mat();
+      const ones = cv.Mat.ones(floatImg.rows, floatImg.cols, floatImg.type());
+
+      // Gamma correction: pixel^0.7 brightens everything but highlights more
+      // Then we blend: 60% gamma-corrected + 40% original to preserve dark detail
+      const gammaCorrected = new cv.Mat();
+      cv.pow(floatImg, 0.7, gammaCorrected);
+
+      // Blend: result = 0.55 * gamma + 0.45 * original
+      const blended = new cv.Mat();
+      cv.addWeighted(gammaCorrected, 0.55, floatImg, 0.45, 0, blended);
+
+      // Back to 8-bit
+      blended.convertTo(result, cv.CV_8U, 255.0);
+
+      floatImg.delete(); ones.delete(); gammaCorrected.delete(); blended.delete();
+
+      // 3. Gentle contrast to keep text crisp
       const contrasted = new cv.Mat();
-      result.convertTo(contrasted, -1, 0.90, 5);
+      result.convertTo(contrasted, -1, 0.95, 3);
       contrasted.copyTo(result);
       contrasted.delete();
 
-      // 3. Very gentle sharpen
-      const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.2,0,-0.2,1.8,-0.2,0,-0.2,0]);
+      // 4. Light sharpen for text clarity
+      const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.25,0,-0.25,2.0,-0.25,0,-0.25,0]);
       const sharp = new cv.Mat();
       cv.filter2D(result, sharp, -1, kernel);
       sharp.copyTo(result);
