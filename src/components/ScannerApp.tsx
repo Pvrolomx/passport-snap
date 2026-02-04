@@ -7,6 +7,8 @@ import ResultScreen from "./ResultScreen";
 
 export type Corner = { x: number; y: number };
 export type AppScreen = "capture" | "corners" | "result";
+// 6 points: TL, TC (top-center/fold), TR, BR, BC (bottom-center/fold), BL
+// Order: [TL, TC, TR, BR, BC, BL]
 
 declare global {
   interface Window {
@@ -24,6 +26,7 @@ export default function ScannerApp() {
   const [cvReady, setCvReady] = useState(false);
   const [cvLoading, setCvLoading] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [useFoldMode, setUseFoldMode] = useState(true); // 6-point mode by default
 
   // Load OpenCV.js
   useEffect(() => {
@@ -39,7 +42,6 @@ export default function ScannerApp() {
         setCvReady(true);
         setCvLoading(false);
       } else {
-        // cv module loaded but needs initialization
         window.cv["onRuntimeInitialized"] = () => {
           setCvReady(true);
           setCvLoading(false);
@@ -51,8 +53,6 @@ export default function ScannerApp() {
     script.src = "https://docs.opencv.org/4.9.0/opencv.js";
     script.async = true;
     script.onload = () => {
-      // OpenCV.js calls onOpenCvReady when ready
-      // But also handle the case where cv is a promise
       if (window.cv && typeof window.cv.then === "function") {
         window.cv.then((cv: any) => {
           window.cv = cv;
@@ -66,10 +66,6 @@ export default function ScannerApp() {
       alert("Error cargando OpenCV. Recarga la página.");
     };
     document.head.appendChild(script);
-
-    return () => {
-      // cleanup not needed, script stays loaded
-    };
   }, []);
 
   // PWA install prompt
@@ -89,45 +85,56 @@ export default function ScannerApp() {
     setInstallPrompt(null);
   };
 
+  // Generate default 6 points (or 4)
+  const getDefaultCorners = (w: number, h: number, foldMode: boolean): Corner[] => {
+    const m = 0.05;
+    if (foldMode) {
+      // 6 points: TL, TC, TR, BR, BC, BL
+      return [
+        { x: w * m, y: h * m },           // TL
+        { x: w * 0.5, y: h * m },         // TC (fold top)
+        { x: w * (1 - m), y: h * m },     // TR
+        { x: w * (1 - m), y: h * (1 - m) }, // BR
+        { x: w * 0.5, y: h * (1 - m) },   // BC (fold bottom)
+        { x: w * m, y: h * (1 - m) },     // BL
+      ];
+    }
+    // 4 points: TL, TR, BR, BL
+    return [
+      { x: w * m, y: h * m },
+      { x: w * (1 - m), y: h * m },
+      { x: w * (1 - m), y: h * (1 - m) },
+      { x: w * m, y: h * (1 - m) },
+    ];
+  };
+
   // When user selects/captures an image
   const handleImageSelected = useCallback(
     (img: HTMLImageElement) => {
       setSourceImage(img);
       setOriginalForCompare(img.src);
 
-      if (cvReady) {
-        const detected = detectCorners(img);
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+
+      if (cvReady && !useFoldMode) {
+        const detected = detectCorners4(img);
         setCorners(detected);
       } else {
-        // Default corners at ~10% inset
-        const w = img.naturalWidth;
-        const h = img.naturalHeight;
-        const m = 0.05;
-        setCorners([
-          { x: w * m, y: h * m },
-          { x: w * (1 - m), y: h * m },
-          { x: w * (1 - m), y: h * (1 - m) },
-          { x: w * m, y: h * (1 - m) },
-        ]);
+        setCorners(getDefaultCorners(w, h, useFoldMode));
       }
       setScreen("corners");
     },
-    [cvReady]
+    [cvReady, useFoldMode]
   );
 
-  // Detect document corners using OpenCV
-  const detectCorners = (img: HTMLImageElement): Corner[] => {
+  // Detect 4 document corners using OpenCV
+  const detectCorners4 = (img: HTMLImageElement): Corner[] => {
     const cv = window.cv;
     if (!cv || !cv.Mat) {
       const w = img.naturalWidth;
       const h = img.naturalHeight;
-      const m = 0.05;
-      return [
-        { x: w * m, y: h * m },
-        { x: w * (1 - m), y: h * m },
-        { x: w * (1 - m), y: h * (1 - m) },
-        { x: w * m, y: h * (1 - m) },
-      ];
+      return getDefaultCorners(w, h, false);
     }
 
     const canvas = document.createElement("canvas");
@@ -146,7 +153,6 @@ export default function ScannerApp() {
       cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
       cv.Canny(blurred, edges, 75, 200);
 
-      // Dilate to close gaps
       const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
       cv.dilate(edges, edges, kernel);
       kernel.delete();
@@ -162,12 +168,10 @@ export default function ScannerApp() {
       for (let i = 0; i < contours.size(); i++) {
         const contour = contours.get(i);
         const area = cv.contourArea(contour);
-
         if (area > imgArea * 0.15 && area > bestArea) {
           const peri = cv.arcLength(contour, true);
           const approx = new cv.Mat();
           cv.approxPolyDP(contour, approx, 0.02 * peri, true);
-
           if (approx.rows === 4) {
             bestContour = approx;
             bestArea = area;
@@ -188,15 +192,13 @@ export default function ScannerApp() {
         bestContour.delete();
         contours.delete();
         hierarchy.delete();
-
-        // Order: top-left, top-right, bottom-right, bottom-left
-        return orderCorners(pts);
+        return orderCorners4(pts);
       }
 
       contours.delete();
       hierarchy.delete();
     } catch (e) {
-      console.warn("Corner detection failed, using defaults:", e);
+      console.warn("Corner detection failed:", e);
     } finally {
       src.delete();
       gray.delete();
@@ -204,42 +206,20 @@ export default function ScannerApp() {
       edges.delete();
     }
 
-    // Fallback
-    const w = img.naturalWidth;
-    const h = img.naturalHeight;
-    const m = 0.05;
-    return [
-      { x: w * m, y: h * m },
-      { x: w * (1 - m), y: h * m },
-      { x: w * (1 - m), y: h * (1 - m) },
-      { x: w * m, y: h * (1 - m) },
-    ];
+    return getDefaultCorners(img.naturalWidth, img.naturalHeight, false);
   };
 
-  // Order corners: TL, TR, BR, BL
-  const orderCorners = (pts: Corner[]): Corner[] => {
-    const center = {
-      x: pts.reduce((s, p) => s + p.x, 0) / 4,
-      y: pts.reduce((s, p) => s + p.y, 0) / 4,
-    };
-
-    const tl = pts.filter((p) => p.x < center.x && p.y < center.y)[0];
-    const tr = pts.filter((p) => p.x >= center.x && p.y < center.y)[0];
-    const br = pts.filter((p) => p.x >= center.x && p.y >= center.y)[0];
-    const bl = pts.filter((p) => p.x < center.x && p.y >= center.y)[0];
-
-    if (tl && tr && br && bl) return [tl, tr, br, bl];
-
-    // Fallback sort
+  // Order 4 corners: TL, TR, BR, BL
+  const orderCorners4 = (pts: Corner[]): Corner[] => {
     const sorted = [...pts].sort((a, b) => a.y - b.y);
     const top = sorted.slice(0, 2).sort((a, b) => a.x - b.x);
     const bottom = sorted.slice(2, 4).sort((a, b) => a.x - b.x);
     return [top[0], top[1], bottom[1], bottom[0]];
   };
 
-  // Process image: perspective correction + enhancement
+  // Process: perspective correction + enhancement
   const handleScan = useCallback(() => {
-    if (!sourceImage || corners.length !== 4) return;
+    if (!sourceImage) return;
 
     const cv = window.cv;
     if (!cv || !cv.Mat) {
@@ -256,49 +236,111 @@ export default function ScannerApp() {
     const src = cv.imread(canvas);
 
     try {
-      // Passport open: 125mm × 88mm → ratio 1.42:1
-      // Output at 300 DPI equivalent
+      // Passport open: 125mm × 88mm → 1750 × 1232 px
       const outW = 1750;
       const outH = 1232;
+      const halfW = Math.round(outW / 2);
 
-      // Source points (from user-adjusted corners)
-      const srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
-        corners[0].x, corners[0].y,
-        corners[1].x, corners[1].y,
-        corners[2].x, corners[2].y,
-        corners[3].x, corners[3].y,
-      ]);
+      let finalCanvas: HTMLCanvasElement;
 
-      // Destination points
-      const dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
-        0, 0,
-        outW, 0,
-        outW, outH,
-        0, outH,
-      ]);
+      if (useFoldMode && corners.length === 6) {
+        // 6-POINT MODE: Process left and right halves separately
+        // Points: [TL(0), TC(1), TR(2), BR(3), BC(4), BL(5)]
+        const [TL, TC, TR, BR, BC, BL] = corners;
 
-      // Perspective transform
-      const M = cv.getPerspectiveTransform(srcPts, dstPts);
-      const warped = new cv.Mat();
-      cv.warpPerspective(src, warped, M, new cv.Size(outW, outH), cv.INTER_CUBIC);
+        // LEFT HALF: TL → TC → BC → BL
+        const srcLeft = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          TL.x, TL.y,
+          TC.x, TC.y,
+          BC.x, BC.y,
+          BL.x, BL.y,
+        ]);
+        const dstLeft = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          0, 0,
+          halfW, 0,
+          halfW, outH,
+          0, outH,
+        ]);
 
-      // Enhancement pipeline
-      const enhanced = enhanceImage(cv, warped);
+        const mLeft = cv.getPerspectiveTransform(srcLeft, dstLeft);
+        const warpedLeft = new cv.Mat();
+        cv.warpPerspective(src, warpedLeft, mLeft, new cv.Size(halfW, outH), cv.INTER_CUBIC);
 
-      // Output to canvas
-      const outCanvas = document.createElement("canvas");
-      outCanvas.width = outW;
-      outCanvas.height = outH;
-      cv.imshow(outCanvas, enhanced);
+        // RIGHT HALF: TC → TR → BR → BC
+        const srcRight = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          TC.x, TC.y,
+          TR.x, TR.y,
+          BR.x, BR.y,
+          BC.x, BC.y,
+        ]);
+        const dstRight = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          0, 0,
+          halfW, 0,
+          halfW, outH,
+          0, outH,
+        ]);
 
-      setResultImage(outCanvas.toDataURL("image/png"));
+        const mRight = cv.getPerspectiveTransform(srcRight, dstRight);
+        const warpedRight = new cv.Mat();
+        cv.warpPerspective(src, warpedRight, mRight, new cv.Size(halfW, outH), cv.INTER_CUBIC);
 
-      // Cleanup
-      srcPts.delete();
-      dstPts.delete();
-      M.delete();
-      warped.delete();
-      enhanced.delete();
+        // Enhance each half
+        const enhLeft = enhanceImage(cv, warpedLeft);
+        const enhRight = enhanceImage(cv, warpedRight);
+
+        // Stitch together
+        finalCanvas = document.createElement("canvas");
+        finalCanvas.width = outW;
+        finalCanvas.height = outH;
+
+        const canvasLeft = document.createElement("canvas");
+        canvasLeft.width = halfW;
+        canvasLeft.height = outH;
+        cv.imshow(canvasLeft, enhLeft);
+
+        const canvasRight = document.createElement("canvas");
+        canvasRight.width = halfW;
+        canvasRight.height = outH;
+        cv.imshow(canvasRight, enhRight);
+
+        const fCtx = finalCanvas.getContext("2d")!;
+        fCtx.drawImage(canvasLeft, 0, 0);
+        fCtx.drawImage(canvasRight, halfW, 0);
+
+        // Cleanup
+        srcLeft.delete(); dstLeft.delete(); mLeft.delete(); warpedLeft.delete();
+        srcRight.delete(); dstRight.delete(); mRight.delete(); warpedRight.delete();
+        enhLeft.delete(); enhRight.delete();
+      } else {
+        // 4-POINT MODE: Standard single perspective transform
+        const srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          corners[0].x, corners[0].y,
+          corners[1].x, corners[1].y,
+          corners[2].x, corners[2].y,
+          corners[3].x, corners[3].y,
+        ]);
+        const dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          0, 0,
+          outW, 0,
+          outW, outH,
+          0, outH,
+        ]);
+
+        const M = cv.getPerspectiveTransform(srcPts, dstPts);
+        const warped = new cv.Mat();
+        cv.warpPerspective(src, warped, M, new cv.Size(outW, outH), cv.INTER_CUBIC);
+
+        const enhanced = enhanceImage(cv, warped);
+
+        finalCanvas = document.createElement("canvas");
+        finalCanvas.width = outW;
+        finalCanvas.height = outH;
+        cv.imshow(finalCanvas, enhanced);
+
+        srcPts.delete(); dstPts.delete(); M.delete(); warped.delete(); enhanced.delete();
+      }
+
+      setResultImage(finalCanvas.toDataURL("image/png"));
     } catch (e) {
       console.error("Scan processing error:", e);
       alert("Error procesando la imagen. Intenta de nuevo.");
@@ -307,31 +349,13 @@ export default function ScannerApp() {
     }
 
     setScreen("result");
-  }, [sourceImage, corners]);
+  }, [sourceImage, corners, useFoldMode]);
 
   // Enhance scanned image
   const enhanceImage = (cv: any, src: any): any => {
     const result = src.clone();
 
     try {
-      // 1. Normalize illumination
-      const gray = new cv.Mat();
-      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-
-      // Large blur to estimate background illumination
-      const bg = new cv.Mat();
-      cv.GaussianBlur(gray, bg, new cv.Size(51, 51), 0);
-
-      // Divide original by background to normalize
-      const normalized = new cv.Mat();
-      cv.divide(gray, bg, normalized, 255.0);
-
-      // 2. Adaptive threshold for text mask
-      const textMask = new cv.Mat();
-      cv.adaptiveThreshold(normalized, textMask, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 21, 10);
-
-      // 3. Merge: use color image but with improved contrast
-      // Convert normalized back to color
       const channels = new cv.MatVector();
       cv.split(result, channels);
 
@@ -343,8 +367,6 @@ export default function ScannerApp() {
 
         ch.convertTo(chFloat, cv.CV_32F);
         cv.GaussianBlur(chFloat, bgCh, new cv.Size(51, 51), 0);
-
-        // Normalize each channel
         cv.divide(chFloat, bgCh, normCh, 255.0);
         normCh.convertTo(ch, cv.CV_8U);
 
@@ -355,7 +377,7 @@ export default function ScannerApp() {
 
       cv.merge(channels, result);
 
-      // 4. Sharpen slightly
+      // Sharpen
       const sharpKernel = cv.matFromArray(3, 3, cv.CV_32FC1, [
         0, -0.5, 0,
         -0.5, 3, -0.5,
@@ -365,16 +387,11 @@ export default function ScannerApp() {
       cv.filter2D(result, sharpened, -1, sharpKernel);
       sharpened.copyTo(result);
 
-      // Cleanup
-      gray.delete();
-      bg.delete();
-      normalized.delete();
-      textMask.delete();
       channels.delete();
       sharpKernel.delete();
       sharpened.delete();
     } catch (e) {
-      console.warn("Enhancement error, returning unenhanced:", e);
+      console.warn("Enhancement error:", e);
     }
 
     return result;
@@ -436,6 +453,8 @@ export default function ScannerApp() {
             onCornersChange={setCorners}
             onScan={handleScan}
             onBack={handleReset}
+            foldMode={useFoldMode}
+            onFoldModeChange={setUseFoldMode}
           />
         )}
         {screen === "result" && resultImage && (
