@@ -281,6 +281,7 @@ export default function ScannerApp() {
   const enhanceImage = (cv: any, src: any): any => {
     const result = src.clone();
     try {
+      // 1. Normalize illumination per channel
       const channels = new cv.MatVector();
       cv.split(result, channels);
       for (let i = 0; i < 3; i++) {
@@ -293,11 +294,50 @@ export default function ScannerApp() {
         chF.delete(); bgCh.delete(); normCh.delete();
       }
       cv.merge(channels, result);
-      const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.5,0,-0.5,3,-0.5,0,-0.5,0]);
+      channels.delete();
+
+      // 2. Convert to LAB and apply CLAHE for strong contrast
+      const lab = new cv.Mat();
+      cv.cvtColor(result, lab, cv.COLOR_RGBA2RGB);
+      const labColor = new cv.Mat();
+      cv.cvtColor(lab, labColor, cv.COLOR_RGB2Lab);
+      lab.delete();
+
+      const labChannels = new cv.MatVector();
+      cv.split(labColor, labChannels);
+
+      // CLAHE on L channel — clipLimit=3.0 for stronger contrast
+      const clahe = new cv.CLAHE(3.0, new cv.Size(8, 8));
+      const lChannel = labChannels.get(0);
+      const lEnhanced = new cv.Mat();
+      clahe.apply(lChannel, lEnhanced);
+      lEnhanced.copyTo(lChannel);
+      lEnhanced.delete();
+      clahe.delete();
+
+      cv.merge(labChannels, labColor);
+      labChannels.delete();
+
+      const rgbResult = new cv.Mat();
+      cv.cvtColor(labColor, rgbResult, cv.COLOR_Lab2RGB);
+      labColor.delete();
+
+      // Convert back to RGBA
+      cv.cvtColor(rgbResult, result, cv.COLOR_RGB2RGBA);
+      rgbResult.delete();
+
+      // 3. Boost contrast: alpha=1.3, beta=10
+      const contrasted = new cv.Mat();
+      result.convertTo(contrasted, -1, 1.3, 10);
+      contrasted.copyTo(result);
+      contrasted.delete();
+
+      // 4. Stronger sharpen
+      const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.8,0,-0.8,4.2,-0.8,0,-0.8,0]);
       const sharp = new cv.Mat();
       cv.filter2D(result, sharp, -1, kernel);
       sharp.copyTo(result);
-      channels.delete(); kernel.delete(); sharp.delete();
+      kernel.delete(); sharp.delete();
     } catch (e) { console.warn("Enhancement error:", e); }
     return result;
   };
