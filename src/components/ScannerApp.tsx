@@ -191,8 +191,8 @@ export default function ScannerApp() {
 
     try {
       // Passport: 125mm × 88mm → 1750 × 1232
-      const outW = 1750;
-      const outH = 1232;
+      const outW = 1232;
+      const outH = 1750;
       const halfH = Math.round(outH / 2);
 
       let finalCanvas: HTMLCanvasElement;
