@@ -69,8 +69,8 @@ export default function ResultScreen({
       // Passport image: 88mm × 125mm, centered on letter
       const pageW = 215.9;
       const pageH = 279.4;
-      const imgW = 88;
-      const imgH = 125;
+      const imgW = 114;
+      const imgH = 162;
       const x = (pageW - imgW) / 2;
       const y = (pageH - imgH) / 2;
       pdf.addImage(displaySrc, "PNG", x, y, imgW, imgH);
