@@ -9,7 +9,19 @@ interface CornersScreenProps {
   onCornersChange: (corners: Corner[]) => void;
   onScan: () => void;
   onBack: () => void;
+  foldMode: boolean;
+  onFoldModeChange: (v: boolean) => void;
 }
+
+// Point labels for 6-point mode
+const LABELS_6 = ["TL", "TC", "TR", "BR", "BC", "BL"];
+// Edges for 6-point: TL→TC, TC→TR, TR→BR, BR→BC, BC→BL, BL→TL
+const EDGES_6 = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,0]];
+// Fold line: TC→BC
+const FOLD_EDGE = [1, 4];
+
+// Edges for 4-point: TL→TR, TR→BR, BR→BL, BL→TL
+const EDGES_4 = [[0,1],[1,2],[2,3],[3,0]];
 
 export default function CornersScreen({
   image,
@@ -17,6 +29,8 @@ export default function CornersScreen({
   onCornersChange,
   onScan,
   onBack,
+  foldMode,
+  onFoldModeChange,
 }: CornersScreenProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -24,6 +38,36 @@ export default function CornersScreen({
   const [processing, setProcessing] = useState(false);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+
+  const edges = foldMode ? EDGES_6 : EDGES_4;
+
+  // When toggling fold mode, reset corners
+  const handleToggleFold = () => {
+    const newMode = !foldMode;
+    onFoldModeChange(newMode);
+    const w = image.naturalWidth;
+    const h = image.naturalHeight;
+    const m = 0.05;
+    if (newMode) {
+      // Switch to 6 points
+      onCornersChange([
+        { x: w * m, y: h * m },
+        { x: w * 0.5, y: h * m },
+        { x: w * (1 - m), y: h * m },
+        { x: w * (1 - m), y: h * (1 - m) },
+        { x: w * 0.5, y: h * (1 - m) },
+        { x: w * m, y: h * (1 - m) },
+      ]);
+    } else {
+      // Switch to 4 points
+      onCornersChange([
+        { x: w * m, y: h * m },
+        { x: w * (1 - m), y: h * m },
+        { x: w * (1 - m), y: h * (1 - m) },
+        { x: w * m, y: h * (1 - m) },
+      ]);
+    }
+  };
 
   // Draw image and overlay
   useEffect(() => {
@@ -51,15 +95,18 @@ export default function CornersScreen({
     ctx.clearRect(0, 0, cw, ch);
     ctx.drawImage(image, ox, oy, iw * s, ih * s);
 
-    // Draw dark overlay outside polygon
+    // Dark overlay
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.fillRect(0, 0, cw, ch);
 
-    // Cut out the polygon area
+    // Cut out polygon
     ctx.save();
     ctx.globalCompositeOperation = "destination-out";
     ctx.beginPath();
-    corners.forEach((c, i) => {
+    const polyOrder = foldMode ? [0, 1, 2, 3, 4, 5] : [0, 1, 2, 3];
+    polyOrder.forEach((idx, i) => {
+      const c = corners[idx];
+      if (!c) return;
       const sx = c.x * s + ox;
       const sy = c.y * s + oy;
       if (i === 0) ctx.moveTo(sx, sy);
@@ -72,7 +119,9 @@ export default function CornersScreen({
     // Redraw image inside polygon
     ctx.save();
     ctx.beginPath();
-    corners.forEach((c, i) => {
+    polyOrder.forEach((idx, i) => {
+      const c = corners[idx];
+      if (!c) return;
       const sx = c.x * s + ox;
       const sy = c.y * s + oy;
       if (i === 0) ctx.moveTo(sx, sy);
@@ -83,48 +132,49 @@ export default function CornersScreen({
     ctx.drawImage(image, ox, oy, iw * s, ih * s);
     ctx.restore();
 
-    // Draw polygon outline
+    // Draw edges
     ctx.strokeStyle = "#3b82f6";
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    corners.forEach((c, i) => {
-      const sx = c.x * s + ox;
-      const sy = c.y * s + oy;
-      if (i === 0) ctx.moveTo(sx, sy);
-      else ctx.lineTo(sx, sy);
-    });
-    ctx.closePath();
-    ctx.stroke();
-
-    // Draw edge midpoint lines (dashed)
-    ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = "rgba(59, 130, 246, 0.4)";
-    for (let i = 0; i < 4; i++) {
-      const c1 = corners[i];
-      const c2 = corners[(i + 1) % 4];
-      ctx.beginPath();
-      ctx.moveTo(c1.x * s + ox, c1.y * s + oy);
-      ctx.lineTo(c2.x * s + ox, c2.y * s + oy);
-      ctx.stroke();
-    }
     ctx.setLineDash([]);
-  }, [image, corners, containerRef.current?.clientWidth]);
+    edges.forEach(([a, b]) => {
+      const ca = corners[a];
+      const cb = corners[b];
+      if (!ca || !cb) return;
+      ctx.beginPath();
+      ctx.moveTo(ca.x * s + ox, ca.y * s + oy);
+      ctx.lineTo(cb.x * s + ox, cb.y * s + oy);
+      ctx.stroke();
+    });
 
-  // Convert screen coords to image coords
-  const screenToImage = (sx: number, sy: number): Corner => ({
-    x: (sx - offset.x) / scale,
-    y: (sy - offset.y) / scale,
-  });
+    // Draw fold line (dashed, different color)
+    if (foldMode && corners.length === 6) {
+      const ct = corners[FOLD_EDGE[0]];
+      const cb = corners[FOLD_EDGE[1]];
+      if (ct && cb) {
+        ctx.strokeStyle = "#f59e0b";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(ct.x * s + ox, ct.y * s + oy);
+        ctx.lineTo(cb.x * s + ox, cb.y * s + oy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+  }, [image, corners, foldMode]);
 
-  // Convert image coords to screen coords
   const imageToScreen = (c: Corner) => ({
     x: c.x * scale + offset.x,
     y: c.y * scale + offset.y,
   });
 
-  // Find nearest corner
+  const screenToImage = (sx: number, sy: number): Corner => ({
+    x: (sx - offset.x) / scale,
+    y: (sy - offset.y) / scale,
+  });
+
   const findNearestCorner = (sx: number, sy: number): number | null => {
-    let minDist = 40; // threshold px
+    let minDist = 40;
     let nearest: number | null = null;
     corners.forEach((c, i) => {
       const sc = imageToScreen(c);
@@ -137,7 +187,6 @@ export default function CornersScreen({
     return nearest;
   };
 
-  // Pointer handlers
   const handlePointerDown = (e: React.PointerEvent) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -158,7 +207,6 @@ export default function CornersScreen({
     const sy = e.clientY - rect.top;
     const imgCoord = screenToImage(sx, sy);
 
-    // Clamp to image bounds
     imgCoord.x = Math.max(0, Math.min(image.naturalWidth, imgCoord.x));
     imgCoord.y = Math.max(0, Math.min(image.naturalHeight, imgCoord.y));
 
@@ -173,12 +221,14 @@ export default function CornersScreen({
 
   const handleScan = () => {
     setProcessing(true);
-    // Slight delay for UI feedback
     requestAnimationFrame(() => {
       onScan();
       setProcessing(false);
     });
   };
+
+  // Determine if a point is a fold point
+  const isFoldPoint = (i: number) => foldMode && (i === 1 || i === 4);
 
   return (
     <div className="flex-1 flex flex-col">
@@ -193,8 +243,22 @@ export default function CornersScreen({
           </svg>
           Atrás
         </button>
-        <span className="text-sm text-neutral-400">Ajusta las esquinas</span>
-        <div className="w-16" />
+        <span className="text-sm text-neutral-400">Ajusta los puntos</span>
+        {/* Fold mode toggle */}
+        <button
+          onClick={handleToggleFold}
+          className={`text-xs px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
+            foldMode
+              ? "bg-amber-600 text-white"
+              : "bg-neutral-800 text-neutral-400 hover:text-white"
+          }`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M12 3v18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="3 3" />
+            <rect x="3" y="5" width="18" height="14" rx="1" stroke="currentColor" strokeWidth="1.5" />
+          </svg>
+          {foldMode ? "6 pts" : "4 pts"}
+        </button>
       </div>
 
       {/* Canvas area */}
@@ -211,12 +275,19 @@ export default function CornersScreen({
         {/* Draggable corner handles */}
         {corners.map((c, i) => {
           const sc = imageToScreen(c);
+          const fold = isFoldPoint(i);
           return (
             <div
               key={i}
-              className="corner-handle"
+              className={fold ? "fold-handle" : "corner-handle"}
               style={{ left: sc.x, top: sc.y }}
-            />
+            >
+              {fold && (
+                <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] text-amber-400 font-bold whitespace-nowrap">
+                  DOBLEZ
+                </span>
+              )}
+            </div>
           );
         })}
       </div>
@@ -244,7 +315,9 @@ export default function CornersScreen({
           )}
         </button>
         <p className="text-xs text-neutral-500 text-center">
-          Arrastra los puntos azules para ajustar el área de escaneo
+          {foldMode
+            ? "Arrastra los 6 puntos — los amarillos marcan el doblez central"
+            : "Arrastra los 4 puntos azules para ajustar el área"}
         </p>
       </div>
     </div>
