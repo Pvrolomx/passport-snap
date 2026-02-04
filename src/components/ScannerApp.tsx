@@ -281,59 +281,30 @@ export default function ScannerApp() {
   const enhanceImage = (cv: any, src: any): any => {
     const result = src.clone();
     try {
-      // 1. Normalize illumination per channel
+      // 1. Gentle illumination normalization
       const channels = new cv.MatVector();
       cv.split(result, channels);
       for (let i = 0; i < 3; i++) {
         const ch = channels.get(i);
         const chF = new cv.Mat(); const bgCh = new cv.Mat(); const normCh = new cv.Mat();
         ch.convertTo(chF, cv.CV_32F);
-        cv.GaussianBlur(chF, bgCh, new cv.Size(51, 51), 0);
-        cv.divide(chF, bgCh, normCh, 255.0);
+        // Larger blur = gentler normalization
+        cv.GaussianBlur(chF, bgCh, new cv.Size(71, 71), 0);
+        cv.divide(chF, bgCh, normCh, 245.0); // 245 instead of 255 = slightly less white
         normCh.convertTo(ch, cv.CV_8U);
         chF.delete(); bgCh.delete(); normCh.delete();
       }
       cv.merge(channels, result);
       channels.delete();
 
-      // 2. Convert to LAB and apply CLAHE for strong contrast
-      const lab = new cv.Mat();
-      cv.cvtColor(result, lab, cv.COLOR_RGBA2RGB);
-      const labColor = new cv.Mat();
-      cv.cvtColor(lab, labColor, cv.COLOR_RGB2Lab);
-      lab.delete();
-
-      const labChannels = new cv.MatVector();
-      cv.split(labColor, labChannels);
-
-      // CLAHE on L channel — clipLimit=3.0 for stronger contrast
-      const clahe = new cv.CLAHE(3.0, new cv.Size(8, 8));
-      const lChannel = labChannels.get(0);
-      const lEnhanced = new cv.Mat();
-      clahe.apply(lChannel, lEnhanced);
-      lEnhanced.copyTo(lChannel);
-      lEnhanced.delete();
-      clahe.delete();
-
-      cv.merge(labChannels, labColor);
-      labChannels.delete();
-
-      const rgbResult = new cv.Mat();
-      cv.cvtColor(labColor, rgbResult, cv.COLOR_Lab2RGB);
-      labColor.delete();
-
-      // Convert back to RGBA
-      cv.cvtColor(rgbResult, result, cv.COLOR_RGB2RGBA);
-      rgbResult.delete();
-
-      // 3. Boost contrast: alpha=1.3, beta=10
+      // 2. Slight contrast reduction: alpha < 1.0 softens, beta brightens slightly
       const contrasted = new cv.Mat();
-      result.convertTo(contrasted, -1, 1.3, 10);
+      result.convertTo(contrasted, -1, 0.95, 8);
       contrasted.copyTo(result);
       contrasted.delete();
 
-      // 4. Stronger sharpen
-      const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.8,0,-0.8,4.2,-0.8,0,-0.8,0]);
+      // 3. Very gentle sharpen
+      const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.3,0,-0.3,2.2,-0.3,0,-0.3,0]);
       const sharp = new cv.Mat();
       cv.filter2D(result, sharp, -1, kernel);
       sharp.copyTo(result);
