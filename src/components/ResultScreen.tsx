@@ -5,87 +5,153 @@ import { jsPDF } from "jspdf";
 import type { DocType } from "./ScannerApp";
 
 interface ResultScreenProps {
-  resultSrc: string;
+  resultSrc: string | null;
   originalSrc: string | null;
   onNewScan: () => void;
   docType: DocType;
+  idFrontResult: string | null;
+  idBackResult: string | null;
 }
 
-export default function ResultScreen({ resultSrc, originalSrc, onNewScan, docType }: ResultScreenProps) {
+export default function ResultScreen({ 
+  resultSrc, originalSrc, onNewScan, docType, idFrontResult, idBackResult 
+}: ResultScreenProps) {
   const [showOriginal, setShowOriginal] = useState(false);
   const [bwMode, setBwMode] = useState(false);
-  const [bwSrc, setBwSrc] = useState<string | null>(null);
+  const [bwFront, setBwFront] = useState<string | null>(null);
+  const [bwBack, setBwBack] = useState<string | null>(null);
+  const [bwPassport, setBwPassport] = useState<string | null>(null);
   const sliderRef = useRef<HTMLDivElement>(null);
   const [sliderPos, setSliderPos] = useState(50);
 
-  const displaySrc = bwMode && bwSrc ? bwSrc : resultSrc;
   const isPassport = docType === "passport";
+  const isID = docType === "id";
+  const hasIDDual = isID && idFrontResult && idBackResult;
 
+  // Convert to B&W when needed
   useEffect(() => {
-    if (!bwMode || bwSrc) return;
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-        data[i] = data[i + 1] = data[i + 2] = gray;
-      }
-      ctx.putImageData(imageData, 0, 0);
-      setBwSrc(canvas.toDataURL("image/png"));
+    if (!bwMode) return;
+    
+    const convertToBW = (src: string, callback: (result: string) => void) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          data[i] = data[i + 1] = data[i + 2] = gray;
+        }
+        ctx.putImageData(imageData, 0, 0);
+        callback(canvas.toDataURL("image/png"));
+      };
+      img.src = src;
     };
-    img.src = resultSrc;
-  }, [bwMode, resultSrc, bwSrc]);
+
+    if (isID && idFrontResult && !bwFront) {
+      convertToBW(idFrontResult, setBwFront);
+    }
+    if (isID && idBackResult && !bwBack) {
+      convertToBW(idBackResult, setBwBack);
+    }
+    if (isPassport && resultSrc && !bwPassport) {
+      convertToBW(resultSrc, setBwPassport);
+    }
+  }, [bwMode, isID, isPassport, idFrontResult, idBackResult, resultSrc, bwFront, bwBack, bwPassport]);
+
+  const displayFront = bwMode && bwFront ? bwFront : idFrontResult;
+  const displayBack = bwMode && bwBack ? bwBack : idBackResult;
+  const displayPassport = bwMode && bwPassport ? bwPassport : resultSrc;
 
   const handleDownloadPNG = () => {
-    const a = document.createElement("a");
-    a.href = displaySrc;
-    a.download = `${isPassport ? "passport" : "id"}-scan-${Date.now()}.png`;
-    a.click();
+    if (hasIDDual) {
+      // Download both as separate files
+      const aFront = document.createElement("a");
+      aFront.href = displayFront!;
+      aFront.download = `id-front-${Date.now()}.png`;
+      aFront.click();
+      
+      setTimeout(() => {
+        const aBack = document.createElement("a");
+        aBack.href = displayBack!;
+        aBack.download = `id-back-${Date.now()}.png`;
+        aBack.click();
+      }, 500);
+    } else {
+      const a = document.createElement("a");
+      a.href = displayPassport!;
+      a.download = `passport-scan-${Date.now()}.png`;
+      a.click();
+    }
   };
 
   const handleDownloadPDF = () => {
-    const img = new Image();
-    img.onload = () => {
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "letter",
-      });
-      
-      const pageW = 215.9;
-      const pageH = 279.4;
-      
-      let imgW: number, imgH: number;
-      if (isPassport) {
-        // Passport: 114 × 162 mm (30% larger than actual size)
-        imgW = 114;
-        imgH = 162;
-      } else {
-        // ID: 114 × 72 mm (scaled up proportionally, ~33% larger than actual 85.6x54)
-        imgW = 114;
-        imgH = 72;
-      }
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "letter",
+    });
+    
+    const pageW = 215.9;
+    const pageH = 279.4;
+    
+    if (hasIDDual && displayFront && displayBack) {
+      // ID: Both sides on same page with gap
+      const imgW = 150; // wider for better visibility
+      const imgH = 95;  // proportional to ID ratio
+      const gap = 15;   // gap between cards
       
       const x = (pageW - imgW) / 2;
+      const totalH = imgH * 2 + gap;
+      const startY = (pageH - totalH) / 2;
+      
+      // Front
+      const imgFront = new Image();
+      imgFront.onload = () => {
+        pdf.addImage(displayFront, "PNG", x, startY, imgW, imgH);
+        pdf.setFontSize(10);
+        pdf.setTextColor(100);
+        pdf.text("FRENTE", pageW / 2, startY - 3, { align: "center" });
+        
+        // Back
+        const imgBack = new Image();
+        imgBack.onload = () => {
+          const backY = startY + imgH + gap;
+          pdf.addImage(displayBack, "PNG", x, backY, imgW, imgH);
+          pdf.text("REVERSO", pageW / 2, backY - 3, { align: "center" });
+          pdf.save(`ine-scan-${Date.now()}.pdf`);
+        };
+        imgBack.src = displayBack;
+      };
+      imgFront.src = displayFront;
+    } else if (isPassport && displayPassport) {
+      // Passport: single image
+      const imgW = 114;
+      const imgH = 162;
+      const x = (pageW - imgW) / 2;
       const y = (pageH - imgH) / 2;
-      pdf.addImage(displaySrc, "PNG", x, y, imgW, imgH);
-      pdf.save(`${isPassport ? "passport" : "id"}-scan-${Date.now()}.pdf`);
-    };
-    img.src = displaySrc;
+      
+      const img = new Image();
+      img.onload = () => {
+        pdf.addImage(displayPassport, "PNG", x, y, imgW, imgH);
+        pdf.save(`passport-scan-${Date.now()}.pdf`);
+      };
+      img.src = displayPassport;
+    }
   };
 
   const handleCopy = async () => {
     try {
-      const response = await fetch(displaySrc);
+      const src = hasIDDual ? displayFront : displayPassport;
+      if (!src) return;
+      const response = await fetch(src);
       const blob = await response.blob();
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      alert("Imagen copiada al portapapeles");
+      alert(hasIDDual ? "Frente copiado al portapapeles" : "Imagen copiada al portapapeles");
     } catch {
       alert("No se pudo copiar");
     }
@@ -113,7 +179,7 @@ export default function ResultScreen({ resultSrc, originalSrc, onNewScan, docTyp
           {isPassport ? "Pasaporte" : "INE / Licencia"}
         </span>
         <div className="flex gap-2">
-          {originalSrc && (
+          {!hasIDDual && originalSrc && (
             <button
               onClick={() => setShowOriginal(!showOriginal)}
               className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
@@ -134,8 +200,21 @@ export default function ResultScreen({ resultSrc, originalSrc, onNewScan, docTyp
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-4 bg-neutral-950">
-        {showOriginal && originalSrc ? (
+      <div className="flex-1 flex items-center justify-center p-4 bg-neutral-950 overflow-auto">
+        {hasIDDual ? (
+          // Dual ID display
+          <div className="flex flex-col gap-4 max-w-md w-full">
+            <div className="text-center">
+              <p className="text-xs text-green-400 mb-2 font-medium">FRENTE</p>
+              <img src={displayFront!} alt="Frente" className="w-full rounded-xl shadow-2xl" />
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-green-400 mb-2 font-medium">REVERSO</p>
+              <img src={displayBack!} alt="Reverso" className="w-full rounded-xl shadow-2xl" />
+            </div>
+          </div>
+        ) : showOriginal && originalSrc && displayPassport ? (
+          // Comparison slider for passport
           <div
             ref={sliderRef}
             className="relative w-full max-w-md overflow-hidden rounded-xl cursor-ew-resize select-none"
@@ -143,7 +222,7 @@ export default function ResultScreen({ resultSrc, originalSrc, onNewScan, docTyp
             onTouchMove={handleSliderMove}
             style={{ touchAction: "none" }}
           >
-            <img src={displaySrc} alt="Escaneado" className="w-full" draggable={false} />
+            <img src={displayPassport} alt="Escaneado" className="w-full" draggable={false} />
             <div
               className="absolute inset-0 overflow-hidden"
               style={{ clipPath: `inset(0 ${100 - sliderPos}% 0 0)` }}
@@ -161,9 +240,9 @@ export default function ResultScreen({ resultSrc, originalSrc, onNewScan, docTyp
               </div>
             </div>
           </div>
-        ) : (
-          <img src={displaySrc} alt="Escaneado" className="max-w-full max-h-full rounded-xl shadow-2xl" />
-        )}
+        ) : displayPassport ? (
+          <img src={displayPassport} alt="Escaneado" className="max-w-full max-h-full rounded-xl shadow-2xl" />
+        ) : null}
       </div>
 
       <div className="px-4 py-4 border-t border-neutral-800">
@@ -173,7 +252,7 @@ export default function ResultScreen({ resultSrc, originalSrc, onNewScan, docTyp
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            PNG
+            PNG{hasIDDual && " (2)"}
           </button>
           <button onClick={handleDownloadPDF}
             className={`flex-1 py-3 rounded-xl transition-colors flex items-center justify-center gap-2 ${
@@ -183,7 +262,7 @@ export default function ResultScreen({ resultSrc, originalSrc, onNewScan, docTyp
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            PDF
+            PDF{hasIDDual && " (ambos)"}
           </button>
           <button onClick={handleCopy}
             className="py-3 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 transition-colors">
