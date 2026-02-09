@@ -1,240 +1,198 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { jsPDF } from "jspdf";
+import type { DocType } from "./ScannerApp";
 
 interface ResultScreenProps {
   resultSrc: string;
   originalSrc: string | null;
   onNewScan: () => void;
+  docType: DocType;
 }
 
-export default function ResultScreen({
-  resultSrc,
-  originalSrc,
-  onNewScan,
-}: ResultScreenProps) {
-  const [showComparison, setShowComparison] = useState(false);
+export default function ResultScreen({ resultSrc, originalSrc, onNewScan, docType }: ResultScreenProps) {
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [bwMode, setBwMode] = useState(false);
+  const [bwSrc, setBwSrc] = useState<string | null>(null);
+  const sliderRef = useRef<HTMLDivElement>(null);
   const [sliderPos, setSliderPos] = useState(50);
-  const [bw, setBw] = useState(false);
-  const compRef = useRef<HTMLDivElement>(null);
-  const [displaySrc, setDisplaySrc] = useState(resultSrc);
 
-  // B&W toggle
+  const displaySrc = bwMode && bwSrc ? bwSrc : resultSrc;
+  const isPassport = docType === "passport";
+
   useEffect(() => {
-    if (!bw) {
-      setDisplaySrc(resultSrc);
-      return;
-    }
-
-    const canvas = document.createElement("canvas");
+    if (!bwMode || bwSrc) return;
     const img = new Image();
     img.onload = () => {
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
       const ctx = canvas.getContext("2d")!;
       ctx.drawImage(img, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
       for (let i = 0; i < data.length; i += 4) {
-        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-        // Apply threshold for cleaner B&W
-        const val = gray > 180 ? 255 : gray < 80 ? 0 : gray;
-        data[i] = data[i + 1] = data[i + 2] = val;
+        const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        data[i] = data[i + 1] = data[i + 2] = gray;
       }
       ctx.putImageData(imageData, 0, 0);
-      setDisplaySrc(canvas.toDataURL("image/png"));
+      setBwSrc(canvas.toDataURL("image/png"));
     };
     img.src = resultSrc;
-  }, [bw, resultSrc]);
+  }, [bwMode, resultSrc, bwSrc]);
 
-  // Download PNG
-  const downloadPNG = () => {
+  const handleDownloadPNG = () => {
     const a = document.createElement("a");
     a.href = displaySrc;
-    a.download = `passport-scan-${Date.now()}.png`;
+    a.download = `${isPassport ? "passport" : "id"}-scan-${Date.now()}.png`;
     a.click();
   };
 
-  // Download PDF
-  const downloadPDF = () => {
+  const handleDownloadPDF = () => {
     const img = new Image();
     img.onload = () => {
-      // Letter size (215.9mm × 279.4mm) with passport image centered
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
         format: "letter",
       });
-      // Passport image: 88mm × 125mm, centered on letter
+      
       const pageW = 215.9;
       const pageH = 279.4;
-      const imgW = 114;
-      const imgH = 162;
+      
+      let imgW: number, imgH: number;
+      if (isPassport) {
+        // Passport: 114 × 162 mm (30% larger than actual size)
+        imgW = 114;
+        imgH = 162;
+      } else {
+        // ID: 114 × 72 mm (scaled up proportionally, ~33% larger than actual 85.6x54)
+        imgW = 114;
+        imgH = 72;
+      }
+      
       const x = (pageW - imgW) / 2;
       const y = (pageH - imgH) / 2;
       pdf.addImage(displaySrc, "PNG", x, y, imgW, imgH);
-      pdf.save(`passport-scan-${Date.now()}.pdf`);
+      pdf.save(`${isPassport ? "passport" : "id"}-scan-${Date.now()}.pdf`);
     };
     img.src = displaySrc;
   };
 
-  // Copy to clipboard
-  const copyToClipboard = async () => {
+  const handleCopy = async () => {
     try {
-      const res = await fetch(displaySrc);
-      const blob = await res.blob();
-      await navigator.clipboard.write([
-        new ClipboardItem({ "image/png": blob }),
-      ]);
+      const response = await fetch(displaySrc);
+      const blob = await response.blob();
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       alert("Imagen copiada al portapapeles");
     } catch {
-      alert("No se pudo copiar. Usa descargar en su lugar.");
+      alert("No se pudo copiar");
     }
   };
 
-  // Comparison slider
-  const handleSliderMove = useCallback((e: React.PointerEvent) => {
-    const rect = compRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const x = e.clientX - rect.left;
-    setSliderPos(Math.max(0, Math.min(100, (x / rect.width) * 100)));
-  }, []);
+  const handleSliderMove = (e: React.PointerEvent | React.TouchEvent) => {
+    if (!sliderRef.current) return;
+    const rect = sliderRef.current.getBoundingClientRect();
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const pos = ((clientX - rect.left) / rect.width) * 100;
+    setSliderPos(Math.max(0, Math.min(100, pos)));
+  };
 
   return (
     <div className="flex-1 flex flex-col">
-      {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800">
-        <button
-          onClick={onNewScan}
-          className="flex items-center gap-1 text-sm text-neutral-400 hover:text-white transition-colors"
-        >
+        <button onClick={onNewScan}
+          className="flex items-center gap-1 text-sm text-neutral-400 hover:text-white transition-colors">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           Nuevo
         </button>
-        <span className="text-sm font-medium text-green-400">✓ Escaneo listo</span>
+        <span className={`text-sm font-medium ${isPassport ? "text-blue-400" : "text-green-400"}`}>
+          {isPassport ? "Pasaporte" : "INE / Licencia"}
+        </span>
         <div className="flex gap-2">
           {originalSrc && (
             <button
-              onClick={() => setShowComparison(!showComparison)}
-              className={`text-xs px-2 py-1 rounded-md transition-colors ${
-                showComparison
-                  ? "bg-blue-600 text-white"
-                  : "bg-neutral-800 text-neutral-400 hover:text-white"
+              onClick={() => setShowOriginal(!showOriginal)}
+              className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                showOriginal ? "bg-purple-600 text-white" : "bg-neutral-800 text-neutral-400 hover:text-white"
               }`}
             >
-              A/B
+              {showOriginal ? "Original" : "Comparar"}
             </button>
           )}
           <button
-            onClick={() => setBw(!bw)}
-            className={`text-xs px-2 py-1 rounded-md transition-colors ${
-              bw
-                ? "bg-blue-600 text-white"
-                : "bg-neutral-800 text-neutral-400 hover:text-white"
+            onClick={() => setBwMode(!bwMode)}
+            className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+              bwMode ? "bg-neutral-600 text-white" : "bg-neutral-800 text-neutral-400 hover:text-white"
             }`}
           >
-            B/N
+            B&N
           </button>
         </div>
       </div>
 
-      {/* Result image */}
-      <div className="flex-1 relative flex items-center justify-center p-4 overflow-hidden">
-        {showComparison && originalSrc ? (
+      <div className="flex-1 flex items-center justify-center p-4 bg-neutral-950">
+        {showOriginal && originalSrc ? (
           <div
-            ref={compRef}
-            className="comparison-container relative w-full max-w-2xl aspect-[1.42/1] rounded-lg overflow-hidden"
-            onPointerDown={(e) => {
-              (e.target as HTMLElement).setPointerCapture(e.pointerId);
-              handleSliderMove(e);
-            }}
-            onPointerMove={(e) => {
-              if (e.buttons > 0) handleSliderMove(e);
-            }}
+            ref={sliderRef}
+            className="relative w-full max-w-md overflow-hidden rounded-xl cursor-ew-resize select-none"
+            onPointerMove={handleSliderMove}
+            onTouchMove={handleSliderMove}
             style={{ touchAction: "none" }}
           >
-            {/* Original (background) */}
-            <img
-              src={originalSrc}
-              alt="Original"
-              className="absolute inset-0 w-full h-full object-contain"
-            />
-            {/* Result (clipped) */}
+            <img src={displaySrc} alt="Escaneado" className="w-full" draggable={false} />
             <div
               className="absolute inset-0 overflow-hidden"
-              style={{ width: `${sliderPos}%` }}
+              style={{ clipPath: `inset(0 ${100 - sliderPos}% 0 0)` }}
             >
-              <img
-                src={displaySrc}
-                alt="Escaneado"
-                className="absolute inset-0 w-full h-full object-contain"
-                style={{ width: `${100 / (sliderPos / 100)}%`, maxWidth: "none" }}
-              />
+              <img src={originalSrc} alt="Original" className="w-full" draggable={false} />
             </div>
-            {/* Slider line */}
             <div
-              className="comparison-slider"
-              style={{ left: `${sliderPos}%` }}
-            />
-            {/* Labels */}
-            <div className="absolute bottom-2 left-2 text-xs bg-black/60 px-2 py-1 rounded">
-              Original
-            </div>
-            <div className="absolute bottom-2 right-2 text-xs bg-black/60 px-2 py-1 rounded">
-              Escaneado
+              className="absolute top-0 bottom-0 w-1 bg-white shadow-lg"
+              style={{ left: `${sliderPos}%`, transform: "translateX(-50%)" }}
+            >
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M8 12H4m0 0l3-3m-3 3l3 3M16 12h4m0 0l-3-3m3 3l-3 3" stroke="#000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
             </div>
           </div>
         ) : (
-          <img
-            src={displaySrc}
-            alt="Documento escaneado"
-            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl img-fade-in"
-          />
+          <img src={displaySrc} alt="Escaneado" className="max-w-full max-h-full rounded-xl shadow-2xl" />
         )}
       </div>
 
-      {/* Action buttons */}
-      <div className="px-4 py-4 border-t border-neutral-800 space-y-3">
-        <div className="flex gap-2">
-          <button
-            onClick={downloadPNG}
-            className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 transition-colors flex items-center justify-center gap-2 font-medium"
-          >
+      <div className="px-4 py-4 border-t border-neutral-800">
+        <div className="flex gap-3">
+          <button onClick={handleDownloadPNG}
+            className="flex-1 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 transition-colors flex items-center justify-center gap-2">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             PNG
           </button>
-          <button
-            onClick={downloadPDF}
-            className="flex-1 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 transition-colors flex items-center justify-center gap-2 font-medium"
-          >
+          <button onClick={handleDownloadPDF}
+            className={`flex-1 py-3 rounded-xl transition-colors flex items-center justify-center gap-2 ${
+              isPassport ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"
+            }`}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             PDF
           </button>
-          <button
-            onClick={copyToClipboard}
-            className="py-3 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 transition-colors flex items-center justify-center"
-          >
+          <button onClick={handleCopy}
+            className="py-3 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 transition-colors">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="2" />
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="2" />
             </svg>
           </button>
         </div>
-        <button
-          onClick={onNewScan}
-          className="w-full py-2.5 rounded-xl border border-neutral-700 hover:border-neutral-500 transition-colors text-sm text-neutral-300"
-        >
-          Nuevo escaneo
-        </button>
       </div>
     </div>
   );
