@@ -1,15 +1,13 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import CaptureScreen from "./CaptureScreen";
 import CornersScreen from "./CornersScreen";
 import ResultScreen from "./ResultScreen";
 
 export type Corner = { x: number; y: number };
 export type AppScreen = "capture" | "corners" | "result";
-// 6 points mode: TL, TR, BR, BL (4 outer corners) + ML, MR (mid-left, mid-right = fold)
-// Order: [TL, TR, BR, BL, ML, MR]
-// ML and MR form the horizontal fold line (left side and right side)
+export type DocType = "passport" | "id"; // passport = portrait 6pts, id = landscape 4pts
 
 declare global {
   interface Window {
@@ -27,7 +25,8 @@ export default function ScannerApp() {
   const [cvReady, setCvReady] = useState(false);
   const [cvLoading, setCvLoading] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
-  const [useFoldMode, setUseFoldMode] = useState(true);
+  const [docType, setDocType] = useState<DocType>("passport");
+  const [useFoldMode, setUseFoldMode] = useState(true); // only for passport
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.cv && window.cv.Mat) {
@@ -81,19 +80,27 @@ export default function ScannerApp() {
     setInstallPrompt(null);
   };
 
-  const getDefaultCorners = (w: number, h: number, foldMode: boolean): Corner[] => {
+  // Default corners based on doc type
+  const getDefaultCorners = (w: number, h: number, type: DocType, foldMode: boolean): Corner[] => {
     const m = 0.05;
-    if (foldMode) {
-      // [TL, TR, BR, BL, ML, MR]
-      // ML = left edge at mid-height, MR = right edge at mid-height
-      // These form the fold line going left-to-right (horizontal)
+    if (type === "id") {
+      // ID/License: always 4 points
       return [
-        { x: w * m, y: h * m },              // TL
-        { x: w * (1 - m), y: h * m },        // TR
-        { x: w * (1 - m), y: h * (1 - m) },  // BR
-        { x: w * m, y: h * (1 - m) },         // BL
-        { x: w * m, y: h * 0.5 },             // ML (fold left)
-        { x: w * (1 - m), y: h * 0.5 },       // MR (fold right)
+        { x: w * m, y: h * m },
+        { x: w * (1 - m), y: h * m },
+        { x: w * (1 - m), y: h * (1 - m) },
+        { x: w * m, y: h * (1 - m) },
+      ];
+    }
+    // Passport with optional fold
+    if (foldMode) {
+      return [
+        { x: w * m, y: h * m },
+        { x: w * (1 - m), y: h * m },
+        { x: w * (1 - m), y: h * (1 - m) },
+        { x: w * m, y: h * (1 - m) },
+        { x: w * m, y: h * 0.5 },
+        { x: w * (1 - m), y: h * 0.5 },
       ];
     }
     return [
@@ -110,72 +117,12 @@ export default function ScannerApp() {
       setOriginalForCompare(img.src);
       const w = img.naturalWidth;
       const h = img.naturalHeight;
-
-      if (cvReady && !useFoldMode) {
-        setCorners(detectCorners4(img));
-      } else {
-        setCorners(getDefaultCorners(w, h, useFoldMode));
-      }
+      const foldEnabled = docType === "passport" && useFoldMode;
+      setCorners(getDefaultCorners(w, h, docType, foldEnabled));
       setScreen("corners");
     },
-    [cvReady, useFoldMode]
+    [docType, useFoldMode]
   );
-
-  const detectCorners4 = (img: HTMLImageElement): Corner[] => {
-    const cv = window.cv;
-    if (!cv || !cv.Mat) return getDefaultCorners(img.naturalWidth, img.naturalHeight, false);
-
-    const canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(img, 0, 0);
-    const src = cv.imread(canvas);
-    const gray = new cv.Mat();
-    const blurred = new cv.Mat();
-    const edges = new cv.Mat();
-
-    try {
-      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-      cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
-      cv.Canny(blurred, edges, 75, 200);
-      const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
-      cv.dilate(edges, edges, kernel);
-      kernel.delete();
-      const contours = new cv.MatVector();
-      const hierarchy = new cv.Mat();
-      cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-      let bestContour: any = null;
-      let bestArea = 0;
-      const imgArea = img.naturalWidth * img.naturalHeight;
-      for (let i = 0; i < contours.size(); i++) {
-        const contour = contours.get(i);
-        const area = cv.contourArea(contour);
-        if (area > imgArea * 0.15 && area > bestArea) {
-          const peri = cv.arcLength(contour, true);
-          const approx = new cv.Mat();
-          cv.approxPolyDP(contour, approx, 0.02 * peri, true);
-          if (approx.rows === 4) { bestContour = approx; bestArea = area; }
-          else approx.delete();
-        }
-      }
-      if (bestContour) {
-        const pts: Corner[] = [];
-        for (let i = 0; i < 4; i++) {
-          pts.push({ x: bestContour.data32S[i * 2], y: bestContour.data32S[i * 2 + 1] });
-        }
-        bestContour.delete(); contours.delete(); hierarchy.delete();
-        const sorted = [...pts].sort((a, b) => a.y - b.y);
-        const top = sorted.slice(0, 2).sort((a, b) => a.x - b.x);
-        const bottom = sorted.slice(2, 4).sort((a, b) => a.x - b.x);
-        return [top[0], top[1], bottom[1], bottom[0]];
-      }
-      contours.delete(); hierarchy.delete();
-    } catch (e) { console.warn("Corner detection failed:", e); }
-    finally { src.delete(); gray.delete(); blurred.delete(); edges.delete(); }
-
-    return getDefaultCorners(img.naturalWidth, img.naturalHeight, false);
-  };
 
   const handleScan = useCallback(() => {
     if (!sourceImage) return;
@@ -190,19 +137,26 @@ export default function ScannerApp() {
     const src = cv.imread(canvas);
 
     try {
-      // Passport: 125mm × 88mm → 1750 × 1232
-      const outW = 1232;
-      const outH = 1750;
-      const halfH = Math.round(outH / 2);
+      let outW: number, outH: number;
+      
+      if (docType === "id") {
+        // ID/License: 85.6mm × 54mm → landscape at 300 DPI = 1011 × 638 px
+        outW = 1011;
+        outH = 638;
+      } else {
+        // Passport: portrait 1232 × 1750
+        outW = 1232;
+        outH = 1750;
+      }
 
       let finalCanvas: HTMLCanvasElement;
+      const foldEnabled = docType === "passport" && useFoldMode && corners.length === 6;
 
-      if (useFoldMode && corners.length === 6) {
-        // 6-POINT MODE: fold is horizontal (ML→MR line)
-        // Points: [TL(0), TR(1), BR(2), BL(3), ML(4), MR(5)]
+      if (foldEnabled) {
+        // 6-POINT MODE for passport
+        const halfH = Math.round(outH / 2);
         const [TL, TR, BR, BL, ML, MR] = corners;
 
-        // TOP HALF: TL → TR → MR → ML
         const srcTop = cv.matFromArray(4, 1, cv.CV_32FC2, [
           TL.x, TL.y, TR.x, TR.y, MR.x, MR.y, ML.x, ML.y,
         ]);
@@ -213,7 +167,6 @@ export default function ScannerApp() {
         const warpedTop = new cv.Mat();
         cv.warpPerspective(src, warpedTop, mTop, new cv.Size(outW, halfH), cv.INTER_CUBIC);
 
-        // BOTTOM HALF: ML → MR → BR → BL
         const srcBot = cv.matFromArray(4, 1, cv.CV_32FC2, [
           ML.x, ML.y, MR.x, MR.y, BR.x, BR.y, BL.x, BL.y,
         ]);
@@ -224,11 +177,9 @@ export default function ScannerApp() {
         const warpedBot = new cv.Mat();
         cv.warpPerspective(src, warpedBot, mBot, new cv.Size(outW, halfH), cv.INTER_CUBIC);
 
-        // Enhance each half
         const enhTop = enhanceImage(cv, warpedTop);
         const enhBot = enhanceImage(cv, warpedBot);
 
-        // Stitch vertically
         finalCanvas = document.createElement("canvas");
         finalCanvas.width = outW;
         finalCanvas.height = outH;
@@ -249,7 +200,7 @@ export default function ScannerApp() {
         srcBot.delete(); dstBot.delete(); mBot.delete(); warpedBot.delete();
         enhTop.delete(); enhBot.delete();
       } else {
-        // 4-POINT MODE
+        // 4-POINT MODE (both passport without fold and ID)
         const srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
           corners[0].x, corners[0].y, corners[1].x, corners[1].y,
           corners[2].x, corners[2].y, corners[3].x, corners[3].y,
@@ -276,12 +227,11 @@ export default function ScannerApp() {
     } finally { src.delete(); }
 
     setScreen("result");
-  }, [sourceImage, corners, useFoldMode]);
+  }, [sourceImage, corners, docType, useFoldMode]);
 
   const enhanceImage = (cv: any, src: any): any => {
     const result = src.clone();
     try {
-      // 1. Illumination normalization
       const channels = new cv.MatVector();
       cv.split(result, channels);
       for (let i = 0; i < 3; i++) {
@@ -296,37 +246,20 @@ export default function ScannerApp() {
       cv.merge(channels, result);
       channels.delete();
 
-      // 2. White background boost: push light pixels whiter
-      // Convert to float, apply gamma < 1 to brighten highlights
       const floatImg = new cv.Mat();
       result.convertTo(floatImg, cv.CV_32F, 1.0 / 255.0);
-
-      // Custom curve: darks stay, lights get pushed to white
-      // Using power curve with gamma=0.7 — brightens highlights more than shadows
-      const curved = new cv.Mat();
-      const ones = cv.Mat.ones(floatImg.rows, floatImg.cols, floatImg.type());
-
-      // Gamma correction: pixel^0.7 brightens everything but highlights more
-      // Then we blend: 60% gamma-corrected + 40% original to preserve dark detail
       const gammaCorrected = new cv.Mat();
       cv.pow(floatImg, 0.7, gammaCorrected);
-
-      // Blend: result = 0.55 * gamma + 0.45 * original
       const blended = new cv.Mat();
       cv.addWeighted(gammaCorrected, 0.55, floatImg, 0.45, 0, blended);
-
-      // Back to 8-bit
       blended.convertTo(result, cv.CV_8U, 255.0);
+      floatImg.delete(); gammaCorrected.delete(); blended.delete();
 
-      floatImg.delete(); ones.delete(); gammaCorrected.delete(); blended.delete();
-
-      // 3. Gentle contrast to keep text crisp
       const contrasted = new cv.Mat();
       result.convertTo(contrasted, -1, 0.95, 3);
       contrasted.copyTo(result);
       contrasted.delete();
 
-      // 4. Light sharpen for text clarity
       const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.25,0,-0.25,2.0,-0.25,0,-0.25,0]);
       const sharp = new cv.Mat();
       cv.filter2D(result, sharp, -1, kernel);
@@ -378,7 +311,13 @@ export default function ScannerApp() {
       </header>
 
       <main className="flex-1 flex flex-col">
-        {screen === "capture" && <CaptureScreen onImageSelected={handleImageSelected} />}
+        {screen === "capture" && (
+          <CaptureScreen 
+            onImageSelected={handleImageSelected}
+            docType={docType}
+            onDocTypeChange={setDocType}
+          />
+        )}
         {screen === "corners" && sourceImage && (
           <CornersScreen
             image={sourceImage}
@@ -386,12 +325,18 @@ export default function ScannerApp() {
             onCornersChange={setCorners}
             onScan={handleScan}
             onBack={handleReset}
-            foldMode={useFoldMode}
+            docType={docType}
+            foldMode={docType === "passport" && useFoldMode}
             onFoldModeChange={setUseFoldMode}
           />
         )}
         {screen === "result" && resultImage && (
-          <ResultScreen resultSrc={resultImage} originalSrc={originalForCompare} onNewScan={handleReset} />
+          <ResultScreen 
+            resultSrc={resultImage} 
+            originalSrc={originalForCompare} 
+            onNewScan={handleReset}
+            docType={docType}
+          />
         )}
       </main>
 
