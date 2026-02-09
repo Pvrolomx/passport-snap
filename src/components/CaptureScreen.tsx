@@ -1,19 +1,26 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import type { DocType } from "./ScannerApp";
+import type { DocType, IDSide } from "./ScannerApp";
 
 interface CaptureScreenProps {
   onImageSelected: (img: HTMLImageElement) => void;
   docType: DocType;
   onDocTypeChange: (type: DocType) => void;
+  idSide: IDSide;
+  idFrontResult: string | null;
 }
 
-export default function CaptureScreen({ onImageSelected, docType, onDocTypeChange }: CaptureScreenProps) {
+export default function CaptureScreen({ 
+  onImageSelected, docType, onDocTypeChange, idSide, idFrontResult 
+}: CaptureScreenProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+
+  const isID = docType === "id";
+  const isCapturingBack = isID && idSide === "back";
 
   const handleFile = (file: File) => {
     const url = URL.createObjectURL(file);
@@ -70,39 +77,71 @@ export default function CaptureScreen({ onImageSelected, docType, onDocTypeChang
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4">
-      {/* Doc Type Selector */}
-      <div className="mb-6 flex gap-2 p-1 bg-neutral-900 rounded-xl">
-        <button
-          onClick={() => onDocTypeChange("passport")}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-            docType === "passport"
-              ? "bg-blue-600 text-white shadow-lg"
-              : "text-neutral-400 hover:text-white"
-          }`}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" strokeWidth="1.5" />
-            <circle cx="12" cy="10" r="3" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M8 16h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      {/* Doc Type Selector - only show if not capturing back */}
+      {!isCapturingBack && (
+        <div className="mb-6 flex gap-2 p-1 bg-neutral-900 rounded-xl">
+          <button
+            onClick={() => onDocTypeChange("passport")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+              docType === "passport"
+                ? "bg-blue-600 text-white shadow-lg"
+                : "text-neutral-400 hover:text-white"
+            }`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" strokeWidth="1.5" />
+              <circle cx="12" cy="10" r="3" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M8 16h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            Pasaporte
+          </button>
+          <button
+            onClick={() => onDocTypeChange("id")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+              docType === "id"
+                ? "bg-green-600 text-white shadow-lg"
+                : "text-neutral-400 hover:text-white"
+            }`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
+              <circle cx="8" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M13 10h6M13 14h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            INE / Licencia
+          </button>
+        </div>
+      )}
+
+      {/* Step indicator for ID */}
+      {isID && (
+        <div className="mb-4 flex items-center gap-3">
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+            idSide === "front" ? "bg-green-600 text-white" : "bg-green-900/50 text-green-400"
+          }`}>
+            <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">1</span>
+            Frente
+            {idFrontResult && <span className="text-green-300">✓</span>}
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-neutral-600">
+            <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          Pasaporte
-        </button>
-        <button
-          onClick={() => onDocTypeChange("id")}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-            docType === "id"
-              ? "bg-green-600 text-white shadow-lg"
-              : "text-neutral-400 hover:text-white"
-          }`}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
-            <circle cx="8" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M13 10h6M13 14h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-          INE / Licencia
-        </button>
-      </div>
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+            idSide === "back" ? "bg-green-600 text-white" : "bg-neutral-800 text-neutral-500"
+          }`}>
+            <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">2</span>
+            Reverso
+          </div>
+        </div>
+      )}
+
+      {/* Front preview when capturing back */}
+      {isCapturingBack && idFrontResult && (
+        <div className="mb-4 p-2 bg-neutral-900 rounded-xl">
+          <p className="text-xs text-neutral-500 text-center mb-2">Frente capturado:</p>
+          <img src={idFrontResult} alt="Frente" className="h-16 rounded-lg opacity-70" />
+        </div>
+      )}
 
       {cameraActive ? (
         <div className="relative w-full max-w-md aspect-[4/3] bg-black rounded-2xl overflow-hidden">
@@ -113,11 +152,10 @@ export default function CaptureScreen({ onImageSelected, docType, onDocTypeChang
             muted
             className="w-full h-full object-cover"
           />
-          {/* Guide overlay */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div
               className={`border-2 border-dashed border-white/50 rounded-lg ${
-                docType === "id" ? "w-4/5 aspect-[1.586/1]" : "w-3/5 aspect-[0.7/1]"
+                isID ? "w-4/5 aspect-[1.586/1]" : "w-3/5 aspect-[0.7/1]"
               }`}
             />
           </div>
@@ -134,7 +172,7 @@ export default function CaptureScreen({ onImageSelected, docType, onDocTypeChang
               onClick={capturePhoto}
               className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-lg"
             >
-              <div className="w-12 h-12 rounded-full border-4 border-blue-600" />
+              <div className={`w-12 h-12 rounded-full border-4 ${isID ? "border-green-600" : "border-blue-600"}`} />
             </button>
           </div>
         </div>
@@ -145,8 +183,8 @@ export default function CaptureScreen({ onImageSelected, docType, onDocTypeChang
           onDrop={handleDrop}
           onDragOver={(e) => e.preventDefault()}
         >
-          <div className={`p-4 rounded-2xl ${docType === "id" ? "bg-green-900/30" : "bg-blue-900/30"}`}>
-            {docType === "id" ? (
+          <div className={`p-4 rounded-2xl ${isID ? "bg-green-900/30" : "bg-blue-900/30"}`}>
+            {isID ? (
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" className="text-green-400">
                 <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
                 <circle cx="8" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.5" />
@@ -162,10 +200,14 @@ export default function CaptureScreen({ onImageSelected, docType, onDocTypeChang
           </div>
           <div className="text-center">
             <p className="text-neutral-300 font-medium">
-              {docType === "id" ? "Escanear INE o Licencia" : "Escanear Pasaporte"}
+              {isID 
+                ? (isCapturingBack ? "Escanear REVERSO" : "Escanear FRENTE") 
+                : "Escanear Pasaporte"}
             </p>
             <p className="text-sm text-neutral-500 mt-1">
-              Toca para seleccionar o arrastra una imagen
+              {isID && !isCapturingBack && "Paso 1 de 2 — "}
+              {isID && isCapturingBack && "Paso 2 de 2 — "}
+              Toca para seleccionar o arrastra
             </p>
           </div>
         </div>
@@ -183,7 +225,9 @@ export default function CaptureScreen({ onImageSelected, docType, onDocTypeChang
       {!cameraActive && (
         <button
           onClick={startCamera}
-          className="mt-6 flex items-center gap-2 px-6 py-3 bg-neutral-800 hover:bg-neutral-700 rounded-xl transition-colors"
+          className={`mt-6 flex items-center gap-2 px-6 py-3 rounded-xl transition-colors ${
+            isID ? "bg-green-900/50 hover:bg-green-900/70" : "bg-neutral-800 hover:bg-neutral-700"
+          }`}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path
