@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import type { Corner, DocType } from "./ScannerApp";
+import type { Corner, DocType, IDSide } from "./ScannerApp";
 
 interface CornersScreenProps {
   image: HTMLImageElement;
@@ -12,12 +12,13 @@ interface CornersScreenProps {
   docType: DocType;
   foldMode: boolean;
   onFoldModeChange: (v: boolean) => void;
+  idSide: IDSide;
 }
 
 const EDGES_4 = [[0,1],[1,2],[2,3],[3,0]];
 
 export default function CornersScreen({
-  image, corners, onCornersChange, onScan, onBack, docType, foldMode, onFoldModeChange,
+  image, corners, onCornersChange, onScan, onBack, docType, foldMode, onFoldModeChange, idSide,
 }: CornersScreenProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -27,6 +28,7 @@ export default function CornersScreen({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
 
   const isPassport = docType === "passport";
+  const isID = docType === "id";
 
   const handleToggleFold = () => {
     if (!isPassport) return;
@@ -79,7 +81,6 @@ export default function CornersScreen({
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.fillRect(0, 0, cw, ch);
 
-    // Cut out outer polygon (always first 4 corners)
     ctx.save();
     ctx.globalCompositeOperation = "destination-out";
     ctx.beginPath();
@@ -110,7 +111,6 @@ export default function CornersScreen({
     ctx.drawImage(image, ox, oy, iw * s, ih * s);
     ctx.restore();
 
-    // Draw edges
     const color = isPassport ? "#3b82f6" : "#22c55e";
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
@@ -125,7 +125,6 @@ export default function CornersScreen({
       ctx.stroke();
     });
 
-    // Fold line for passport
     if (isPassport && foldMode && corners.length === 6) {
       const ml = corners[4];
       const mr = corners[5];
@@ -205,7 +204,7 @@ export default function CornersScreen({
           Atrás
         </button>
         <span className={`text-sm font-medium ${isPassport ? "text-blue-400" : "text-green-400"}`}>
-          {isPassport ? "Pasaporte" : "INE / Licencia"}
+          {isPassport ? "Pasaporte" : (idSide === "front" ? "INE — Frente" : "INE — Reverso")}
         </span>
         {isPassport && (
           <button onClick={handleToggleFold}
@@ -256,13 +255,17 @@ export default function CornersScreen({
             <><svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <path d="M4 4h4M4 4v4M20 4h-4M20 4v4M4 20h4M4 20v-4M20 20h-4M20 20v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               <path d="M2 12h20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="2 2" />
-            </svg>Escanear</>
+            </svg>
+            {isID && idSide === "front" ? "Escanear Frente" : isID ? "Escanear Reverso" : "Escanear"}
+            </>
           )}
         </button>
         <p className="text-xs text-neutral-500 text-center">
           {isPassport && foldMode
             ? "Arrastra los 6 puntos — los amarillos marcan el doblez"
-            : "Arrastra los 4 puntos para ajustar el área"}
+            : isID 
+              ? `Paso ${idSide === "front" ? "1" : "2"} de 2 — Arrastra los 4 puntos`
+              : "Arrastra los 4 puntos para ajustar el área"}
         </p>
       </div>
     </div>
