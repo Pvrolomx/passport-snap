@@ -1,81 +1,193 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useState, useCallback } from "react";
+import type { DocType } from "./ScannerApp";
 
 interface CaptureScreenProps {
   onImageSelected: (img: HTMLImageElement) => void;
+  docType: DocType;
+  onDocTypeChange: (type: DocType) => void;
 }
 
-export default function CaptureScreen({ onImageSelected }: CaptureScreenProps) {
+export default function CaptureScreen({ onImageSelected, docType, onDocTypeChange }: CaptureScreenProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
-  const loadImage = useCallback(
-    (file: File) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => onImageSelected(img);
-        img.src = e.target?.result as string;
-      };
-      reader.readAsDataURL(file);
-    },
-    [onImageSelected]
-  );
+  const handleFile = (file: File) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => onImageSelected(img);
+    img.src = url;
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) loadImage(file);
+    if (file) handleFile(file);
   };
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith("image/")) loadImage(file);
-    },
-    [loadImage]
-  );
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+      setStream(mediaStream);
+      setCameraActive(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (err) {
+      alert("No se pudo acceder a la cámara");
+    }
+  };
+
+  const stopCamera = () => {
+    stream?.getTracks().forEach((t) => t.stop());
+    setStream(null);
+    setCameraActive(false);
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(video, 0, 0);
+    stopCamera();
+    const img = new Image();
+    img.onload = () => onImageSelected(img);
+    img.src = canvas.toDataURL("image/jpeg", 0.95);
+  };
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file?.type.startsWith("image/")) handleFile(file);
+  }, []);
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6 gap-8">
-      {/* Hero */}
-      <div className="text-center space-y-3 max-w-sm">
-        <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center shadow-lg shadow-blue-500/20">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" className="text-white">
-            <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M7 8h4M7 12h10M7 16h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-            <circle cx="17" cy="8" r="2" stroke="currentColor" strokeWidth="1.2" />
+    <div className="flex-1 flex flex-col items-center justify-center p-4">
+      {/* Doc Type Selector */}
+      <div className="mb-6 flex gap-2 p-1 bg-neutral-900 rounded-xl">
+        <button
+          onClick={() => onDocTypeChange("passport")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+            docType === "passport"
+              ? "bg-blue-600 text-white shadow-lg"
+              : "text-neutral-400 hover:text-white"
+          }`}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" strokeWidth="1.5" />
+            <circle cx="12" cy="10" r="3" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M8 16h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-        </div>
-        <h1 className="text-2xl font-bold">PassportSnap</h1>
-        <p className="text-neutral-400 text-sm leading-relaxed">
-          Escanea pasaportes y documentos con tu celular. 
-          Imagen limpia, recta, lista para trámites.
-        </p>
-        <div className="flex items-center justify-center gap-1 text-xs text-green-500">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="2" />
-            <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          Pasaporte
+        </button>
+        <button
+          onClick={() => onDocTypeChange("id")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+            docType === "id"
+              ? "bg-green-600 text-white shadow-lg"
+              : "text-neutral-400 hover:text-white"
+          }`}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
+            <circle cx="8" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M13 10h6M13 14h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-          100% privado — nada sale de tu dispositivo
-        </div>
+          INE / Licencia
+        </button>
       </div>
 
-      {/* Capture area */}
-      <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop}
-        className="w-full max-w-sm space-y-3"
-      >
-        {/* Camera button (primary) */}
-        <button
-          onClick={() => cameraInputRef.current?.click()}
-          className="w-full py-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 transition-colors flex items-center justify-center gap-3 text-lg font-medium pulse-scan"
+      {cameraActive ? (
+        <div className="relative w-full max-w-md aspect-[4/3] bg-black rounded-2xl overflow-hidden">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+          />
+          {/* Guide overlay */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div
+              className={`border-2 border-dashed border-white/50 rounded-lg ${
+                docType === "id" ? "w-4/5 aspect-[1.586/1]" : "w-3/5 aspect-[0.7/1]"
+              }`}
+            />
+          </div>
+          <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
+            <button
+              onClick={stopCamera}
+              className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+              </svg>
+            </button>
+            <button
+              onClick={capturePhoto}
+              className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-lg"
+            >
+              <div className="w-12 h-12 rounded-full border-4 border-blue-600" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          className="w-full max-w-md aspect-[4/3] border-2 border-dashed border-neutral-700 rounded-2xl flex flex-col items-center justify-center gap-6 cursor-pointer hover:border-neutral-500 transition-colors"
+          onClick={() => fileInputRef.current?.click()}
+          onDrop={handleDrop}
+          onDragOver={(e) => e.preventDefault()}
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <div className={`p-4 rounded-2xl ${docType === "id" ? "bg-green-900/30" : "bg-blue-900/30"}`}>
+            {docType === "id" ? (
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" className="text-green-400">
+                <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                <circle cx="8" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M13 10h6M13 14h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" className="text-blue-400">
+                <rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                <circle cx="12" cy="10" r="3" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M8 16h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            )}
+          </div>
+          <div className="text-center">
+            <p className="text-neutral-300 font-medium">
+              {docType === "id" ? "Escanear INE o Licencia" : "Escanear Pasaporte"}
+            </p>
+            <p className="text-sm text-neutral-500 mt-1">
+              Toca para seleccionar o arrastra una imagen
+            </p>
+          </div>
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      {!cameraActive && (
+        <button
+          onClick={startCamera}
+          className="mt-6 flex items-center gap-2 px-6 py-3 bg-neutral-800 hover:bg-neutral-700 rounded-xl transition-colors"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path
-              d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2v11z"
+              d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"
               stroke="currentColor"
               strokeWidth="2"
               strokeLinecap="round"
@@ -83,62 +195,9 @@ export default function CaptureScreen({ onImageSelected }: CaptureScreenProps) {
             />
             <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="2" />
           </svg>
-          Tomar foto
+          Usar Cámara
         </button>
-
-        {/* Upload button (secondary) */}
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full py-3 rounded-xl border border-neutral-700 hover:border-neutral-500 active:bg-neutral-800 transition-colors flex items-center justify-center gap-2 text-sm text-neutral-300"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          Subir imagen existente
-        </button>
-      </div>
-
-      {/* Hidden inputs */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={handleFileChange}
-        className="hidden"
-      />
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleFileChange}
-        className="hidden"
-      />
-
-      {/* How it works */}
-      <div className="max-w-sm w-full pt-4 border-t border-neutral-800">
-        <p className="text-xs text-neutral-500 text-center mb-3">Cómo funciona</p>
-        <div className="flex justify-between text-center text-xs text-neutral-400 gap-4">
-          <div className="flex-1 space-y-1">
-            <div className="text-2xl">📸</div>
-            <p>Toma foto</p>
-          </div>
-          <div className="flex-1 space-y-1">
-            <div className="text-2xl">📐</div>
-            <p>Ajusta esquinas</p>
-          </div>
-          <div className="flex-1 space-y-1">
-            <div className="text-2xl">✨</div>
-            <p>Escaneo limpio</p>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
