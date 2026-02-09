@@ -7,7 +7,8 @@ import ResultScreen from "./ResultScreen";
 
 export type Corner = { x: number; y: number };
 export type AppScreen = "capture" | "corners" | "result";
-export type DocType = "passport" | "id"; // passport = portrait 6pts, id = landscape 4pts
+export type DocType = "passport" | "id";
+export type IDSide = "front" | "back";
 
 declare global {
   interface Window {
@@ -26,7 +27,12 @@ export default function ScannerApp() {
   const [cvLoading, setCvLoading] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [docType, setDocType] = useState<DocType>("passport");
-  const [useFoldMode, setUseFoldMode] = useState(true); // only for passport
+  const [useFoldMode, setUseFoldMode] = useState(true);
+  
+  // For ID dual-scan
+  const [idSide, setIdSide] = useState<IDSide>("front");
+  const [idFrontResult, setIdFrontResult] = useState<string | null>(null);
+  const [idBackResult, setIdBackResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.cv && window.cv.Mat) {
@@ -80,11 +86,9 @@ export default function ScannerApp() {
     setInstallPrompt(null);
   };
 
-  // Default corners based on doc type
   const getDefaultCorners = (w: number, h: number, type: DocType, foldMode: boolean): Corner[] => {
     const m = 0.05;
     if (type === "id") {
-      // ID/License: always 4 points
       return [
         { x: w * m, y: h * m },
         { x: w * (1 - m), y: h * m },
@@ -92,7 +96,6 @@ export default function ScannerApp() {
         { x: w * m, y: h * (1 - m) },
       ];
     }
-    // Passport with optional fold
     if (foldMode) {
       return [
         { x: w * m, y: h * m },
@@ -124,38 +127,34 @@ export default function ScannerApp() {
     [docType, useFoldMode]
   );
 
-  const handleScan = useCallback(() => {
-    if (!sourceImage) return;
+  const processImage = (sourceImg: HTMLImageElement, cornersPts: Corner[]): string | null => {
     const cv = window.cv;
-    if (!cv || !cv.Mat) { alert("OpenCV no está listo."); return; }
+    if (!cv || !cv.Mat) return null;
 
     const canvas = document.createElement("canvas");
-    canvas.width = sourceImage.naturalWidth;
-    canvas.height = sourceImage.naturalHeight;
+    canvas.width = sourceImg.naturalWidth;
+    canvas.height = sourceImg.naturalHeight;
     const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(sourceImage, 0, 0);
+    ctx.drawImage(sourceImg, 0, 0);
     const src = cv.imread(canvas);
 
     try {
       let outW: number, outH: number;
       
       if (docType === "id") {
-        // ID/License: 85.6mm × 54mm → landscape at 300 DPI = 1011 × 638 px
         outW = 1011;
         outH = 638;
       } else {
-        // Passport: portrait 1232 × 1750
         outW = 1232;
         outH = 1750;
       }
 
       let finalCanvas: HTMLCanvasElement;
-      const foldEnabled = docType === "passport" && useFoldMode && corners.length === 6;
+      const foldEnabled = docType === "passport" && useFoldMode && cornersPts.length === 6;
 
       if (foldEnabled) {
-        // 6-POINT MODE for passport
         const halfH = Math.round(outH / 2);
-        const [TL, TR, BR, BL, ML, MR] = corners;
+        const [TL, TR, BR, BL, ML, MR] = cornersPts;
 
         const srcTop = cv.matFromArray(4, 1, cv.CV_32FC2, [
           TL.x, TL.y, TR.x, TR.y, MR.x, MR.y, ML.x, ML.y,
@@ -200,10 +199,9 @@ export default function ScannerApp() {
         srcBot.delete(); dstBot.delete(); mBot.delete(); warpedBot.delete();
         enhTop.delete(); enhBot.delete();
       } else {
-        // 4-POINT MODE (both passport without fold and ID)
         const srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
-          corners[0].x, corners[0].y, corners[1].x, corners[1].y,
-          corners[2].x, corners[2].y, corners[3].x, corners[3].y,
+          cornersPts[0].x, cornersPts[0].y, cornersPts[1].x, cornersPts[1].y,
+          cornersPts[2].x, cornersPts[2].y, cornersPts[3].x, cornersPts[3].y,
         ]);
         const dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
           0, 0, outW, 0, outW, outH, 0, outH,
@@ -220,14 +218,44 @@ export default function ScannerApp() {
         srcPts.delete(); dstPts.delete(); M.delete(); warped.delete(); enhanced.delete();
       }
 
-      setResultImage(finalCanvas.toDataURL("image/png"));
+      src.delete();
+      return finalCanvas.toDataURL("image/png");
     } catch (e) {
       console.error("Scan error:", e);
-      alert("Error procesando. Intenta de nuevo.");
-    } finally { src.delete(); }
+      src.delete();
+      return null;
+    }
+  };
 
-    setScreen("result");
-  }, [sourceImage, corners, docType, useFoldMode]);
+  const handleScan = useCallback(() => {
+    if (!sourceImage) return;
+    
+    const result = processImage(sourceImage, corners);
+    if (!result) {
+      alert("Error procesando. Intenta de nuevo.");
+      return;
+    }
+
+    if (docType === "id") {
+      if (idSide === "front") {
+        // Save front, go back to capture for back
+        setIdFrontResult(result);
+        setIdSide("back");
+        setScreen("capture");
+        setSourceImage(null);
+        setCorners([]);
+      } else {
+        // Save back, go to result with both
+        setIdBackResult(result);
+        setResultImage(result); // Will use both in ResultScreen
+        setScreen("result");
+      }
+    } else {
+      // Passport: single scan
+      setResultImage(result);
+      setScreen("result");
+    }
+  }, [sourceImage, corners, docType, idSide, useFoldMode]);
 
   const enhanceImage = (cv: any, src: any): any => {
     const result = src.clone();
@@ -275,6 +303,17 @@ export default function ScannerApp() {
     setCorners([]);
     setResultImage(null);
     setOriginalForCompare(null);
+    setIdSide("front");
+    setIdFrontResult(null);
+    setIdBackResult(null);
+  };
+
+  const handleDocTypeChange = (type: DocType) => {
+    setDocType(type);
+    // Reset ID state when changing type
+    setIdSide("front");
+    setIdFrontResult(null);
+    setIdBackResult(null);
   };
 
   return (
@@ -315,7 +354,9 @@ export default function ScannerApp() {
           <CaptureScreen 
             onImageSelected={handleImageSelected}
             docType={docType}
-            onDocTypeChange={setDocType}
+            onDocTypeChange={handleDocTypeChange}
+            idSide={idSide}
+            idFrontResult={idFrontResult}
           />
         )}
         {screen === "corners" && sourceImage && (
@@ -328,14 +369,17 @@ export default function ScannerApp() {
             docType={docType}
             foldMode={docType === "passport" && useFoldMode}
             onFoldModeChange={setUseFoldMode}
+            idSide={idSide}
           />
         )}
-        {screen === "result" && resultImage && (
+        {screen === "result" && (
           <ResultScreen 
             resultSrc={resultImage} 
             originalSrc={originalForCompare} 
             onNewScan={handleReset}
             docType={docType}
+            idFrontResult={idFrontResult}
+            idBackResult={idBackResult}
           />
         )}
       </main>
