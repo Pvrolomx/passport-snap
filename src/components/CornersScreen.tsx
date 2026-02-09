@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
-import type { Corner } from "./ScannerApp";
+import { useRef, useState, useEffect } from "react";
+import type { Corner, DocType } from "./ScannerApp";
 
 interface CornersScreenProps {
   image: HTMLImageElement;
@@ -9,21 +9,15 @@ interface CornersScreenProps {
   onCornersChange: (corners: Corner[]) => void;
   onScan: () => void;
   onBack: () => void;
+  docType: DocType;
   foldMode: boolean;
   onFoldModeChange: (v: boolean) => void;
 }
 
-// 6-point: [TL(0), TR(1), BR(2), BL(3), ML(4), MR(5)]
-// Polygon order for clipping: TL → TR → MR → BR → BL → ML (going around)
-// But for overlay we use: TL, TR, BR, BL as outer + ML,MR as fold
-const OUTER_POLY_6 = [0, 1, 2, 3]; // TL, TR, BR, BL
-const EDGES_6 = [[0,1],[1,2],[2,3],[3,0],[4,5]]; // outer edges + fold line
-const FOLD_EDGE = [4, 5]; // ML → MR
-
 const EDGES_4 = [[0,1],[1,2],[2,3],[3,0]];
 
 export default function CornersScreen({
-  image, corners, onCornersChange, onScan, onBack, foldMode, onFoldModeChange,
+  image, corners, onCornersChange, onScan, onBack, docType, foldMode, onFoldModeChange,
 }: CornersScreenProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -32,7 +26,10 @@ export default function CornersScreen({
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
 
+  const isPassport = docType === "passport";
+
   const handleToggleFold = () => {
+    if (!isPassport) return;
     const newMode = !foldMode;
     onFoldModeChange(newMode);
     const w = image.naturalWidth;
@@ -76,20 +73,17 @@ export default function CornersScreen({
     canvas.height = ch;
     const ctx = canvas.getContext("2d")!;
 
-    // Draw image
     ctx.clearRect(0, 0, cw, ch);
     ctx.drawImage(image, ox, oy, iw * s, ih * s);
 
-    // Dark overlay
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.fillRect(0, 0, cw, ch);
 
-    // Cut out the outer polygon (4 corners always)
-    const outerIdx = [0, 1, 2, 3];
+    // Cut out outer polygon (always first 4 corners)
     ctx.save();
     ctx.globalCompositeOperation = "destination-out";
     ctx.beginPath();
-    outerIdx.forEach((idx, i) => {
+    [0,1,2,3].forEach((idx, i) => {
       const c = corners[idx];
       if (!c) return;
       const sx = c.x * s + ox;
@@ -101,10 +95,9 @@ export default function CornersScreen({
     ctx.fill();
     ctx.restore();
 
-    // Redraw image inside polygon
     ctx.save();
     ctx.beginPath();
-    outerIdx.forEach((idx, i) => {
+    [0,1,2,3].forEach((idx, i) => {
       const c = corners[idx];
       if (!c) return;
       const sx = c.x * s + ox;
@@ -117,8 +110,9 @@ export default function CornersScreen({
     ctx.drawImage(image, ox, oy, iw * s, ih * s);
     ctx.restore();
 
-    // Draw outer edges (blue solid)
-    ctx.strokeStyle = "#3b82f6";
+    // Draw edges
+    const color = isPassport ? "#3b82f6" : "#22c55e";
+    ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.setLineDash([]);
     EDGES_4.forEach(([a, b]) => {
@@ -131,8 +125,8 @@ export default function CornersScreen({
       ctx.stroke();
     });
 
-    // Draw fold line (amber dashed)
-    if (foldMode && corners.length === 6) {
+    // Fold line for passport
+    if (isPassport && foldMode && corners.length === 6) {
       const ml = corners[4];
       const mr = corners[5];
       if (ml && mr) {
@@ -146,7 +140,7 @@ export default function CornersScreen({
         ctx.setLineDash([]);
       }
     }
-  }, [image, corners, foldMode]);
+  }, [image, corners, foldMode, isPassport]);
 
   const imageToScreen = (c: Corner) => ({
     x: c.x * scale + offset.x,
@@ -198,7 +192,7 @@ export default function CornersScreen({
     requestAnimationFrame(() => { onScan(); setProcessing(false); });
   };
 
-  const isFoldPoint = (i: number) => foldMode && (i === 4 || i === 5);
+  const isFoldPoint = (i: number) => isPassport && foldMode && (i === 4 || i === 5);
 
   return (
     <div className="flex-1 flex flex-col">
@@ -210,17 +204,22 @@ export default function CornersScreen({
           </svg>
           Atrás
         </button>
-        <span className="text-sm text-neutral-400">Ajusta los puntos</span>
-        <button onClick={handleToggleFold}
-          className={`text-xs px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
-            foldMode ? "bg-amber-600 text-white" : "bg-neutral-800 text-neutral-400 hover:text-white"
-          }`}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M3 12h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="3 3" />
-            <rect x="3" y="5" width="18" height="14" rx="1" stroke="currentColor" strokeWidth="1.5" />
-          </svg>
-          {foldMode ? "6 pts" : "4 pts"}
-        </button>
+        <span className={`text-sm font-medium ${isPassport ? "text-blue-400" : "text-green-400"}`}>
+          {isPassport ? "Pasaporte" : "INE / Licencia"}
+        </span>
+        {isPassport && (
+          <button onClick={handleToggleFold}
+            className={`text-xs px-2.5 py-1 rounded-md transition-colors flex items-center gap-1 ${
+              foldMode ? "bg-amber-600 text-white" : "bg-neutral-800 text-neutral-400 hover:text-white"
+            }`}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M3 12h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="3 3" />
+              <rect x="3" y="5" width="18" height="14" rx="1" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            {foldMode ? "6 pts" : "4 pts"}
+          </button>
+        )}
+        {!isPassport && <div className="w-16" />}
       </div>
 
       <div ref={containerRef} className="flex-1 relative select-none"
@@ -231,9 +230,9 @@ export default function CornersScreen({
         {corners.map((c, i) => {
           const sc = imageToScreen(c);
           const fold = isFoldPoint(i);
+          const color = fold ? "fold-handle" : (isPassport ? "corner-handle" : "corner-handle-green");
           return (
-            <div key={i} className={fold ? "fold-handle" : "corner-handle"}
-              style={{ left: sc.x, top: sc.y }}>
+            <div key={i} className={color} style={{ left: sc.x, top: sc.y }}>
               {fold && (
                 <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] text-amber-400 font-bold whitespace-nowrap">
                   DOBLEZ
@@ -246,7 +245,11 @@ export default function CornersScreen({
 
       <div className="px-4 py-4 border-t border-neutral-800 space-y-2">
         <button onClick={handleScan} disabled={processing}
-          className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 text-lg font-medium">
+          className={`w-full py-3 rounded-xl transition-colors flex items-center justify-center gap-2 text-lg font-medium ${
+            isPassport 
+              ? "bg-blue-600 hover:bg-blue-700 active:bg-blue-800" 
+              : "bg-green-600 hover:bg-green-700 active:bg-green-800"
+          } disabled:opacity-50`}>
           {processing ? (
             <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full spin-scan" />Procesando...</>
           ) : (
@@ -257,9 +260,9 @@ export default function CornersScreen({
           )}
         </button>
         <p className="text-xs text-neutral-500 text-center">
-          {foldMode
-            ? "Arrastra los 6 puntos — los amarillos marcan el doblez horizontal"
-            : "Arrastra los 4 puntos azules para ajustar el área"}
+          {isPassport && foldMode
+            ? "Arrastra los 6 puntos — los amarillos marcan el doblez"
+            : "Arrastra los 4 puntos para ajustar el área"}
         </p>
       </div>
     </div>
