@@ -20,6 +20,7 @@ export default function CaptureScreen({
   const [stream, setStream] = useState<MediaStream | null>(null);
 
   const isID = docType === "id";
+  const isDocument = docType === "document";
   const isCapturingBack = isID && idSide === "back";
 
   const handleFile = (file: File) => {
@@ -75,20 +76,32 @@ export default function CaptureScreen({
     if (file?.type.startsWith("image/")) handleFile(file);
   }, []);
 
+  const getButtonColor = () => {
+    if (isDocument) return "bg-amber-600";
+    if (isID) return "bg-green-600";
+    return "bg-blue-600";
+  };
+
+  const getAccentColor = () => {
+    if (isDocument) return "border-amber-600";
+    if (isID) return "border-green-600";
+    return "border-blue-600";
+  };
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4">
       {/* Doc Type Selector - only show if not capturing back */}
       {!isCapturingBack && (
-        <div className="mb-6 flex gap-2 p-1 bg-neutral-900 rounded-xl">
+        <div className="mb-6 flex gap-1.5 p-1 bg-neutral-900 rounded-xl">
           <button
             onClick={() => onDocTypeChange("passport")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
               docType === "passport"
                 ? "bg-blue-600 text-white shadow-lg"
                 : "text-neutral-400 hover:text-white"
             }`}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" strokeWidth="1.5" />
               <circle cx="12" cy="10" r="3" stroke="currentColor" strokeWidth="1.5" />
               <path d="M8 16h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -97,18 +110,32 @@ export default function CaptureScreen({
           </button>
           <button
             onClick={() => onDocTypeChange("id")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
               docType === "id"
                 ? "bg-green-600 text-white shadow-lg"
                 : "text-neutral-400 hover:text-white"
             }`}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
               <circle cx="8" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.5" />
               <path d="M13 10h6M13 14h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
-            INE / Licencia
+            INE
+          </button>
+          <button
+            onClick={() => onDocTypeChange("document")}
+            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+              docType === "document"
+                ? "bg-amber-600 text-white shadow-lg"
+                : "text-neutral-400 hover:text-white"
+            }`}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            Documento
           </button>
         </div>
       )}
@@ -155,7 +182,7 @@ export default function CaptureScreen({
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div
               className={`border-2 border-dashed border-white/50 rounded-lg ${
-                isID ? "w-4/5 aspect-[1.586/1]" : "w-3/5 aspect-[0.7/1]"
+                isDocument ? "w-4/5 aspect-[0.77/1]" : isID ? "w-4/5 aspect-[1.586/1]" : "w-3/5 aspect-[0.7/1]"
               }`}
             />
           </div>
@@ -172,7 +199,7 @@ export default function CaptureScreen({
               onClick={capturePhoto}
               className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-lg"
             >
-              <div className={`w-12 h-12 rounded-full border-4 ${isID ? "border-green-600" : "border-blue-600"}`} />
+              <div className={`w-12 h-12 rounded-full border-4 ${getAccentColor()}`} />
             </button>
           </div>
         </div>
@@ -183,8 +210,13 @@ export default function CaptureScreen({
           onDrop={handleDrop}
           onDragOver={(e) => e.preventDefault()}
         >
-          <div className={`p-4 rounded-2xl ${isID ? "bg-green-900/30" : "bg-blue-900/30"}`}>
-            {isID ? (
+          <div className={`p-4 rounded-2xl ${isDocument ? "bg-amber-900/30" : isID ? "bg-green-900/30" : "bg-blue-900/30"}`}>
+            {isDocument ? (
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" className="text-amber-400">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            ) : isID ? (
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" className="text-green-400">
                 <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
                 <circle cx="8" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.5" />
@@ -200,15 +232,22 @@ export default function CaptureScreen({
           </div>
           <div className="text-center">
             <p className="text-neutral-300 font-medium">
-              {isID 
-                ? (isCapturingBack ? "Escanear REVERSO" : "Escanear FRENTE") 
-                : "Escanear Pasaporte"}
+              {isDocument 
+                ? "Escanear Documento" 
+                : isID 
+                  ? (isCapturingBack ? "Escanear REVERSO" : "Escanear FRENTE") 
+                  : "Escanear Pasaporte"}
             </p>
             <p className="text-sm text-neutral-500 mt-1">
               {isID && !isCapturingBack && "Paso 1 de 2 — "}
               {isID && isCapturingBack && "Paso 2 de 2 — "}
               Toca para seleccionar o arrastra
             </p>
+            {isDocument && (
+              <p className="text-xs text-amber-500/70 mt-2">
+                Modo Magic Color — contratos, actas, recibos
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -225,7 +264,7 @@ export default function CaptureScreen({
         <button
           onClick={startCamera}
           className={`mt-6 flex items-center gap-2 px-6 py-3 rounded-xl transition-colors ${
-            isID ? "bg-green-900/50 hover:bg-green-900/70" : "bg-neutral-800 hover:bg-neutral-700"
+            isDocument ? "bg-amber-900/50 hover:bg-amber-900/70" : isID ? "bg-green-900/50 hover:bg-green-900/70" : "bg-neutral-800 hover:bg-neutral-700"
           }`}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
