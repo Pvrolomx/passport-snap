@@ -257,9 +257,10 @@ export default function ScannerApp() {
     }
   }, [sourceImage, corners, docType, idSide, useFoldMode]);
 
-  const enhanceImage = (cv: any, src: any): any => {
+  const enhanceImage = (cv: any, src: any, magicColor: boolean = true): any => {
     const result = src.clone();
     try {
+      // 1. Illumination normalization
       const channels = new cv.MatVector();
       cv.split(result, channels);
       for (let i = 0; i < 3; i++) {
@@ -274,6 +275,7 @@ export default function ScannerApp() {
       cv.merge(channels, result);
       channels.delete();
 
+      // 2. Gamma correction for whiter background
       const floatImg = new cv.Mat();
       result.convertTo(floatImg, cv.CV_32F, 1.0 / 255.0);
       const gammaCorrected = new cv.Mat();
@@ -283,12 +285,51 @@ export default function ScannerApp() {
       blended.convertTo(result, cv.CV_8U, 255.0);
       floatImg.delete(); gammaCorrected.delete(); blended.delete();
 
+      // 3. Magic Color - CamScanner style
+      if (magicColor) {
+        // Convert to grayscale for luminance-based thresholding
+        const gray = new cv.Mat();
+        cv.cvtColor(result, gray, cv.COLOR_RGBA2GRAY);
+        
+        // Get pixel data
+        const rows = result.rows;
+        const cols = result.cols;
+        const resultData = result.data;
+        const grayData = gray.data;
+        
+        const BLACK_THRESHOLD = 80;  // Pixels below this → pure black
+        const WHITE_THRESHOLD = 180; // Pixels above this → pure white
+        
+        for (let i = 0; i < rows * cols; i++) {
+          const lum = grayData[i];
+          const idx = i * 4; // RGBA
+          
+          if (lum < BLACK_THRESHOLD) {
+            // Black point select: make pure black
+            resultData[idx] = 0;     // R
+            resultData[idx + 1] = 0; // G
+            resultData[idx + 2] = 0; // B
+            // Alpha stays the same
+          } else if (lum > WHITE_THRESHOLD) {
+            // White point select: make pure white
+            resultData[idx] = 255;     // R
+            resultData[idx + 1] = 255; // G
+            resultData[idx + 2] = 255; // B
+          }
+          // Middle values stay as-is (preserves color info like photos)
+        }
+        
+        gray.delete();
+      }
+
+      // 4. Light contrast boost
       const contrasted = new cv.Mat();
-      result.convertTo(contrasted, -1, 0.95, 3);
+      result.convertTo(contrasted, -1, 1.05, 0);
       contrasted.copyTo(result);
       contrasted.delete();
 
-      const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.25,0,-0.25,2.0,-0.25,0,-0.25,0]);
+      // 5. Sharpen for crispy text
+      const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.4,0,-0.4,2.6,-0.4,0,-0.4,0]);
       const sharp = new cv.Mat();
       cv.filter2D(result, sharp, -1, kernel);
       sharp.copyTo(result);
