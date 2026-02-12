@@ -20,15 +20,15 @@ export default function ResultScreen({
   const [bwMode, setBwMode] = useState(false);
   const [bwFront, setBwFront] = useState<string | null>(null);
   const [bwBack, setBwBack] = useState<string | null>(null);
-  const [bwPassport, setBwPassport] = useState<string | null>(null);
+  const [bwResult, setBwResult] = useState<string | null>(null);
   const sliderRef = useRef<HTMLDivElement>(null);
   const [sliderPos, setSliderPos] = useState(50);
 
   const isPassport = docType === "passport";
   const isID = docType === "id";
+  const isDocument = docType === "document";
   const hasIDDual = isID && idFrontResult && idBackResult;
 
-  // Convert to B&W when needed
   useEffect(() => {
     if (!bwMode) return;
     
@@ -52,29 +52,21 @@ export default function ResultScreen({
       img.src = src;
     };
 
-    if (isID && idFrontResult && !bwFront) {
-      convertToBW(idFrontResult, setBwFront);
-    }
-    if (isID && idBackResult && !bwBack) {
-      convertToBW(idBackResult, setBwBack);
-    }
-    if (isPassport && resultSrc && !bwPassport) {
-      convertToBW(resultSrc, setBwPassport);
-    }
-  }, [bwMode, isID, isPassport, idFrontResult, idBackResult, resultSrc, bwFront, bwBack, bwPassport]);
+    if (isID && idFrontResult && !bwFront) convertToBW(idFrontResult, setBwFront);
+    if (isID && idBackResult && !bwBack) convertToBW(idBackResult, setBwBack);
+    if ((isPassport || isDocument) && resultSrc && !bwResult) convertToBW(resultSrc, setBwResult);
+  }, [bwMode, isID, isPassport, isDocument, idFrontResult, idBackResult, resultSrc, bwFront, bwBack, bwResult]);
 
   const displayFront = bwMode && bwFront ? bwFront : idFrontResult;
   const displayBack = bwMode && bwBack ? bwBack : idBackResult;
-  const displayPassport = bwMode && bwPassport ? bwPassport : resultSrc;
+  const displayResult = bwMode && bwResult ? bwResult : resultSrc;
 
   const handleDownloadPNG = () => {
     if (hasIDDual) {
-      // Download both as separate files
       const aFront = document.createElement("a");
       aFront.href = displayFront!;
       aFront.download = `id-front-${Date.now()}.png`;
       aFront.click();
-      
       setTimeout(() => {
         const aBack = document.createElement("a");
         aBack.href = displayBack!;
@@ -83,8 +75,8 @@ export default function ResultScreen({
       }, 500);
     } else {
       const a = document.createElement("a");
-      a.href = displayPassport!;
-      a.download = `passport-scan-${Date.now()}.png`;
+      a.href = displayResult!;
+      a.download = `${isDocument ? "document" : "passport"}-scan-${Date.now()}.png`;
       a.click();
     }
   };
@@ -100,16 +92,13 @@ export default function ResultScreen({
     const pageH = 279.4;
     
     if (hasIDDual && displayFront && displayBack) {
-      // ID: Both sides on same page with gap
-      const imgW = 150; // wider for better visibility
-      const imgH = 95;  // proportional to ID ratio
-      const gap = 15;   // gap between cards
-      
+      const imgW = 150;
+      const imgH = 95;
+      const gap = 15;
       const x = (pageW - imgW) / 2;
       const totalH = imgH * 2 + gap;
       const startY = (pageH - totalH) / 2;
       
-      // Front
       const imgFront = new Image();
       imgFront.onload = () => {
         pdf.addImage(displayFront, "PNG", x, startY, imgW, imgH);
@@ -117,7 +106,6 @@ export default function ResultScreen({
         pdf.setTextColor(100);
         pdf.text("FRENTE", pageW / 2, startY - 3, { align: "center" });
         
-        // Back
         const imgBack = new Image();
         imgBack.onload = () => {
           const backY = startY + imgH + gap;
@@ -128,25 +116,32 @@ export default function ResultScreen({
         imgBack.src = displayBack;
       };
       imgFront.src = displayFront;
-    } else if (isPassport && displayPassport) {
-      // Passport: single image
-      const imgW = 114;
-      const imgH = 162;
+    } else if (displayResult) {
+      let imgW: number, imgH: number;
+      if (isDocument) {
+        // Document: larger, almost full page with margins
+        imgW = 180;
+        imgH = 233; // Letter ratio
+      } else {
+        // Passport
+        imgW = 114;
+        imgH = 162;
+      }
       const x = (pageW - imgW) / 2;
       const y = (pageH - imgH) / 2;
       
       const img = new Image();
       img.onload = () => {
-        pdf.addImage(displayPassport, "PNG", x, y, imgW, imgH);
-        pdf.save(`passport-scan-${Date.now()}.pdf`);
+        pdf.addImage(displayResult, "PNG", x, y, imgW, imgH);
+        pdf.save(`${isDocument ? "document" : "passport"}-scan-${Date.now()}.pdf`);
       };
-      img.src = displayPassport;
+      img.src = displayResult;
     }
   };
 
   const handleCopy = async () => {
     try {
-      const src = hasIDDual ? displayFront : displayPassport;
+      const src = hasIDDual ? displayFront : displayResult;
       if (!src) return;
       const response = await fetch(src);
       const blob = await response.blob();
@@ -165,6 +160,24 @@ export default function ResultScreen({
     setSliderPos(Math.max(0, Math.min(100, pos)));
   };
 
+  const getTextColor = () => {
+    if (isDocument) return "text-amber-400";
+    if (isID) return "text-green-400";
+    return "text-blue-400";
+  };
+
+  const getButtonColor = () => {
+    if (isDocument) return "bg-amber-600 hover:bg-amber-700";
+    if (isID) return "bg-green-600 hover:bg-green-700";
+    return "bg-blue-600 hover:bg-blue-700";
+  };
+
+  const getTitle = () => {
+    if (isDocument) return "Documento";
+    if (isID) return "INE / Licencia";
+    return "Pasaporte";
+  };
+
   return (
     <div className="flex-1 flex flex-col">
       <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800">
@@ -175,8 +188,8 @@ export default function ResultScreen({
           </svg>
           Nuevo
         </button>
-        <span className={`text-sm font-medium ${isPassport ? "text-blue-400" : "text-green-400"}`}>
-          {isPassport ? "Pasaporte" : "INE / Licencia"}
+        <span className={`text-sm font-medium ${getTextColor()}`}>
+          {getTitle()}
         </span>
         <div className="flex gap-2">
           {!hasIDDual && originalSrc && (
@@ -202,7 +215,6 @@ export default function ResultScreen({
 
       <div className="flex-1 flex items-center justify-center p-4 bg-neutral-950 overflow-auto">
         {hasIDDual ? (
-          // Dual ID display
           <div className="flex flex-col gap-4 max-w-md w-full">
             <div className="text-center">
               <p className="text-xs text-green-400 mb-2 font-medium">FRENTE</p>
@@ -213,8 +225,7 @@ export default function ResultScreen({
               <img src={displayBack!} alt="Reverso" className="w-full rounded-xl shadow-2xl" />
             </div>
           </div>
-        ) : showOriginal && originalSrc && displayPassport ? (
-          // Comparison slider for passport
+        ) : showOriginal && originalSrc && displayResult ? (
           <div
             ref={sliderRef}
             className="relative w-full max-w-md overflow-hidden rounded-xl cursor-ew-resize select-none"
@@ -222,7 +233,7 @@ export default function ResultScreen({
             onTouchMove={handleSliderMove}
             style={{ touchAction: "none" }}
           >
-            <img src={displayPassport} alt="Escaneado" className="w-full" draggable={false} />
+            <img src={displayResult} alt="Escaneado" className="w-full" draggable={false} />
             <div
               className="absolute inset-0 overflow-hidden"
               style={{ clipPath: `inset(0 ${100 - sliderPos}% 0 0)` }}
@@ -240,8 +251,8 @@ export default function ResultScreen({
               </div>
             </div>
           </div>
-        ) : displayPassport ? (
-          <img src={displayPassport} alt="Escaneado" className="max-w-full max-h-full rounded-xl shadow-2xl" />
+        ) : displayResult ? (
+          <img src={displayResult} alt="Escaneado" className="max-w-full max-h-full rounded-xl shadow-2xl" />
         ) : null}
       </div>
 
@@ -255,9 +266,7 @@ export default function ResultScreen({
             PNG{hasIDDual && " (2)"}
           </button>
           <button onClick={handleDownloadPDF}
-            className={`flex-1 py-3 rounded-xl transition-colors flex items-center justify-center gap-2 ${
-              isPassport ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"
-            }`}>
+            className={`flex-1 py-3 rounded-xl transition-colors flex items-center justify-center gap-2 ${getButtonColor()}`}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
