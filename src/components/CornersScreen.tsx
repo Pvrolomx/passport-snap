@@ -29,6 +29,13 @@ export default function CornersScreen({
 
   const isPassport = docType === "passport";
   const isID = docType === "id";
+  const isDocument = docType === "document";
+
+  const getColor = () => {
+    if (isDocument) return "#f59e0b"; // amber
+    if (isID) return "#22c55e"; // green
+    return "#3b82f6"; // blue
+  };
 
   const handleToggleFold = () => {
     if (!isPassport) return;
@@ -111,8 +118,7 @@ export default function CornersScreen({
     ctx.drawImage(image, ox, oy, iw * s, ih * s);
     ctx.restore();
 
-    const color = isPassport ? "#3b82f6" : "#22c55e";
-    ctx.strokeStyle = color;
+    ctx.strokeStyle = getColor();
     ctx.lineWidth = 2;
     ctx.setLineDash([]);
     EDGES_4.forEach(([a, b]) => {
@@ -139,7 +145,7 @@ export default function CornersScreen({
         ctx.setLineDash([]);
       }
     }
-  }, [image, corners, foldMode, isPassport]);
+  }, [image, corners, foldMode, isPassport, isID, isDocument]);
 
   const imageToScreen = (c: Corner) => ({
     x: c.x * scale + offset.x,
@@ -193,6 +199,31 @@ export default function CornersScreen({
 
   const isFoldPoint = (i: number) => isPassport && foldMode && (i === 4 || i === 5);
 
+  const getHandleClass = (i: number) => {
+    if (isFoldPoint(i)) return "fold-handle";
+    if (isDocument) return "corner-handle-amber";
+    if (isID) return "corner-handle-green";
+    return "corner-handle";
+  };
+
+  const getButtonClass = () => {
+    if (isDocument) return "bg-amber-600 hover:bg-amber-700 active:bg-amber-800";
+    if (isID) return "bg-green-600 hover:bg-green-700 active:bg-green-800";
+    return "bg-blue-600 hover:bg-blue-700 active:bg-blue-800";
+  };
+
+  const getTextColor = () => {
+    if (isDocument) return "text-amber-400";
+    if (isID) return "text-green-400";
+    return "text-blue-400";
+  };
+
+  const getTitle = () => {
+    if (isDocument) return "Documento";
+    if (isID) return idSide === "front" ? "INE — Frente" : "INE — Reverso";
+    return "Pasaporte";
+  };
+
   return (
     <div className="flex-1 flex flex-col">
       <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800">
@@ -203,8 +234,8 @@ export default function CornersScreen({
           </svg>
           Atrás
         </button>
-        <span className={`text-sm font-medium ${isPassport ? "text-blue-400" : "text-green-400"}`}>
-          {isPassport ? "Pasaporte" : (idSide === "front" ? "INE — Frente" : "INE — Reverso")}
+        <span className={`text-sm font-medium ${getTextColor()}`}>
+          {getTitle()}
         </span>
         {isPassport && (
           <button onClick={handleToggleFold}
@@ -228,11 +259,9 @@ export default function CornersScreen({
 
         {corners.map((c, i) => {
           const sc = imageToScreen(c);
-          const fold = isFoldPoint(i);
-          const color = fold ? "fold-handle" : (isPassport ? "corner-handle" : "corner-handle-green");
           return (
-            <div key={i} className={color} style={{ left: sc.x, top: sc.y }}>
-              {fold && (
+            <div key={i} className={getHandleClass(i)} style={{ left: sc.x, top: sc.y }}>
+              {isFoldPoint(i) && (
                 <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] text-amber-400 font-bold whitespace-nowrap">
                   DOBLEZ
                 </span>
@@ -244,11 +273,7 @@ export default function CornersScreen({
 
       <div className="px-4 py-4 border-t border-neutral-800 space-y-2">
         <button onClick={handleScan} disabled={processing}
-          className={`w-full py-3 rounded-xl transition-colors flex items-center justify-center gap-2 text-lg font-medium ${
-            isPassport 
-              ? "bg-blue-600 hover:bg-blue-700 active:bg-blue-800" 
-              : "bg-green-600 hover:bg-green-700 active:bg-green-800"
-          } disabled:opacity-50`}>
+          className={`w-full py-3 rounded-xl transition-colors flex items-center justify-center gap-2 text-lg font-medium ${getButtonClass()} disabled:opacity-50`}>
           {processing ? (
             <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full spin-scan" />Procesando...</>
           ) : (
@@ -265,7 +290,9 @@ export default function CornersScreen({
             ? "Arrastra los 6 puntos — los amarillos marcan el doblez"
             : isID 
               ? `Paso ${idSide === "front" ? "1" : "2"} de 2 — Arrastra los 4 puntos`
-              : "Arrastra los 4 puntos para ajustar el área"}
+              : isDocument
+                ? "Modo Magic Color — fondo blanco, texto negro"
+                : "Arrastra los 4 puntos para ajustar el área"}
         </p>
       </div>
     </div>
