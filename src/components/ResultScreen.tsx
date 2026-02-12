@@ -92,9 +92,10 @@ export default function ResultScreen({
     const pageH = 279.4;
     
     if (hasIDDual && displayFront && displayBack) {
-      const imgW = 150;
-      const imgH = 95;
-      const gap = 15;
+      // INE: 70 × 44mm (ratio 1.585), gap 12mm, no labels
+      const imgW = 70;
+      const imgH = 44;
+      const gap = 12;
       const x = (pageW - imgW) / 2;
       const totalH = imgH * 2 + gap;
       const startY = (pageH - totalH) / 2;
@@ -102,15 +103,11 @@ export default function ResultScreen({
       const imgFront = new Image();
       imgFront.onload = () => {
         pdf.addImage(displayFront, "PNG", x, startY, imgW, imgH);
-        pdf.setFontSize(10);
-        pdf.setTextColor(100);
-        pdf.text("FRENTE", pageW / 2, startY - 3, { align: "center" });
         
         const imgBack = new Image();
         imgBack.onload = () => {
           const backY = startY + imgH + gap;
           pdf.addImage(displayBack, "PNG", x, backY, imgW, imgH);
-          pdf.text("REVERSO", pageW / 2, backY - 3, { align: "center" });
           pdf.save(`ine-scan-${Date.now()}.pdf`);
         };
         imgBack.src = displayBack;
