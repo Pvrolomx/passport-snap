@@ -7,7 +7,7 @@ import ResultScreen from "./ResultScreen";
 
 export type Corner = { x: number; y: number };
 export type AppScreen = "capture" | "corners" | "result";
-export type DocType = "passport" | "id";
+export type DocType = "passport" | "id" | "document"; // document = contracts, acts (B&W aggressive)
 export type IDSide = "front" | "back";
 
 declare global {
@@ -29,7 +29,6 @@ export default function ScannerApp() {
   const [docType, setDocType] = useState<DocType>("passport");
   const [useFoldMode, setUseFoldMode] = useState(true);
   
-  // For ID dual-scan
   const [idSide, setIdSide] = useState<IDSide>("front");
   const [idFrontResult, setIdFrontResult] = useState<string | null>(null);
   const [idBackResult, setIdBackResult] = useState<string | null>(null);
@@ -88,7 +87,8 @@ export default function ScannerApp() {
 
   const getDefaultCorners = (w: number, h: number, type: DocType, foldMode: boolean): Corner[] => {
     const m = 0.05;
-    if (type === "id") {
+    // ID and Document are landscape, Passport is portrait with optional fold
+    if (type === "id" || type === "document") {
       return [
         { x: w * m, y: h * m },
         { x: w * (1 - m), y: h * m },
@@ -142,9 +142,15 @@ export default function ScannerApp() {
       let outW: number, outH: number;
       
       if (docType === "id") {
+        // ID card: 85.6mm × 54mm at 300 DPI
         outW = 1011;
         outH = 638;
+      } else if (docType === "document") {
+        // Document: Letter size at 200 DPI (good balance quality/size)
+        outW = 1700;
+        outH = 2200;
       } else {
+        // Passport: portrait
         outW = 1232;
         outH = 1750;
       }
@@ -176,9 +182,8 @@ export default function ScannerApp() {
         const warpedBot = new cv.Mat();
         cv.warpPerspective(src, warpedBot, mBot, new cv.Size(outW, halfH), cv.INTER_CUBIC);
 
-        const mode: "document" | "id" = "id"; // IDs use soft mode
-        const enhTop = enhanceImage(cv, warpedTop, mode);
-        const enhBot = enhanceImage(cv, warpedBot, mode);
+        const enhTop = enhanceImage(cv, warpedTop, docType);
+        const enhBot = enhanceImage(cv, warpedBot, docType);
 
         finalCanvas = document.createElement("canvas");
         finalCanvas.width = outW;
@@ -210,8 +215,7 @@ export default function ScannerApp() {
         const M = cv.getPerspectiveTransform(srcPts, dstPts);
         const warped = new cv.Mat();
         cv.warpPerspective(src, warped, M, new cv.Size(outW, outH), cv.INTER_CUBIC);
-        const mode: "document" | "id" = "id"; // Both passport and ID use soft mode for now
-        const enhanced = enhanceImage(cv, warped, mode);
+        const enhanced = enhanceImage(cv, warped, docType);
 
         finalCanvas = document.createElement("canvas");
         finalCanvas.width = outW; finalCanvas.height = outH;
@@ -240,32 +244,30 @@ export default function ScannerApp() {
 
     if (docType === "id") {
       if (idSide === "front") {
-        // Save front, go back to capture for back
         setIdFrontResult(result);
         setIdSide("back");
         setScreen("capture");
         setSourceImage(null);
         setCorners([]);
       } else {
-        // Save back, go to result with both
         setIdBackResult(result);
-        setResultImage(result); // Will use both in ResultScreen
+        setResultImage(result);
         setScreen("result");
       }
     } else {
-      // Passport: single scan
       setResultImage(result);
       setScreen("result");
     }
   }, [sourceImage, corners, docType, idSide, useFoldMode]);
 
-  // Mode: "document" = contracts, acts (aggressive white/black point)
-  //       "id" = INE, passport, license (soft, preserve colors)
-  const enhanceImage = (cv: any, src: any, mode: "document" | "id" = "id"): any => {
+  // Enhancement modes:
+  // - "document": Magic Color aggressive (black/white point select) for contracts, acts
+  // - "id"/"passport": Soft processing, preserve colors for photos/holograms
+  const enhanceImage = (cv: any, src: any, type: DocType): any => {
     const result = src.clone();
     try {
-      if (mode === "document") {
-        // === DOCUMENT MODE: CamScanner style ===
+      if (type === "document") {
+        // === DOCUMENT MODE: Aggressive Magic Color ===
         
         // 1. Strong illumination normalization
         const channels = new cv.MatVector();
@@ -274,7 +276,7 @@ export default function ScannerApp() {
           const ch = channels.get(i);
           const chF = new cv.Mat(); const bgCh = new cv.Mat(); const normCh = new cv.Mat();
           ch.convertTo(chF, cv.CV_32F);
-          cv.GaussianBlur(chF, bgCh, new cv.Size(71, 71), 0);
+          cv.GaussianBlur(chF, bgCh, new cv.Size(51, 51), 0);
           cv.divide(chF, bgCh, normCh, 255.0);
           normCh.convertTo(ch, cv.CV_8U);
           chF.delete(); bgCh.delete(); normCh.delete();
@@ -282,17 +284,18 @@ export default function ScannerApp() {
         cv.merge(channels, result);
         channels.delete();
 
-        // 2. Gamma push whites
+        // 2. Aggressive gamma for white background
         const floatImg = new cv.Mat();
         result.convertTo(floatImg, cv.CV_32F, 1.0 / 255.0);
         const gammaCorrected = new cv.Mat();
-        cv.pow(floatImg, 0.6, gammaCorrected);
+        cv.pow(floatImg, 0.6, gammaCorrected); // More aggressive gamma
         gammaCorrected.convertTo(result, cv.CV_8U, 255.0);
         floatImg.delete(); gammaCorrected.delete();
 
-        // 3. Magic Color - aggressive black/white point
+        // 3. Magic Color - Black/White point select
         const gray = new cv.Mat();
         cv.cvtColor(result, gray, cv.COLOR_RGBA2GRAY);
+        
         const rows = result.rows;
         const cols = result.cols;
         const resultData = result.data;
@@ -304,6 +307,7 @@ export default function ScannerApp() {
         for (let i = 0; i < rows * cols; i++) {
           const lum = grayData[i];
           const idx = i * 4;
+          
           if (lum < BLACK_THRESHOLD) {
             resultData[idx] = 0;
             resultData[idx + 1] = 0;
@@ -316,7 +320,13 @@ export default function ScannerApp() {
         }
         gray.delete();
 
-        // 4. Strong sharpen
+        // 4. Strong contrast
+        const contrasted = new cv.Mat();
+        result.convertTo(contrasted, -1, 1.1, 5);
+        contrasted.copyTo(result);
+        contrasted.delete();
+
+        // 5. Strong sharpen for crispy text
         const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.5,0,-0.5,3.0,-0.5,0,-0.5,0]);
         const sharp = new cv.Mat();
         cv.filter2D(result, sharp, -1, kernel);
@@ -324,30 +334,42 @@ export default function ScannerApp() {
         kernel.delete(); sharp.delete();
 
       } else {
-        // === ID MODE: Soft, preserve colors ===
+        // === ID/PASSPORT MODE: Soft processing, preserve colors ===
         
-        // 1. Gentle illumination normalization only
+        // 1. Light illumination normalization (larger blur = gentler)
         const channels = new cv.MatVector();
         cv.split(result, channels);
         for (let i = 0; i < 3; i++) {
           const ch = channels.get(i);
           const chF = new cv.Mat(); const bgCh = new cv.Mat(); const normCh = new cv.Mat();
           ch.convertTo(chF, cv.CV_32F);
-          cv.GaussianBlur(chF, bgCh, new cv.Size(91, 91), 0); // larger blur = gentler
-          cv.divide(chF, bgCh, normCh, 230.0); // lower factor = less white push
+          cv.GaussianBlur(chF, bgCh, new cv.Size(91, 91), 0); // Larger = gentler
+          cv.divide(chF, bgCh, normCh, 240.0); // Less aggressive white point
           normCh.convertTo(ch, cv.CV_8U);
           chF.delete(); bgCh.delete(); normCh.delete();
         }
         cv.merge(channels, result);
         channels.delete();
 
-        // 2. Very light contrast adjustment
+        // 2. Very light gamma (almost none)
+        const floatImg = new cv.Mat();
+        result.convertTo(floatImg, cv.CV_32F, 1.0 / 255.0);
+        const gammaCorrected = new cv.Mat();
+        cv.pow(floatImg, 0.9, gammaCorrected); // Gentle gamma
+        const blended = new cv.Mat();
+        cv.addWeighted(gammaCorrected, 0.3, floatImg, 0.7, 0, blended); // Mostly original
+        blended.convertTo(result, cv.CV_8U, 255.0);
+        floatImg.delete(); gammaCorrected.delete(); blended.delete();
+
+        // 3. NO Magic Color for IDs - preserve photos, holograms, colors
+
+        // 4. Light contrast
         const contrasted = new cv.Mat();
-        result.convertTo(contrasted, -1, 1.05, 5);
+        result.convertTo(contrasted, -1, 1.02, 2);
         contrasted.copyTo(result);
         contrasted.delete();
 
-        // 3. Light sharpen for text readability
+        // 5. Light sharpen
         const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.2,0,-0.2,1.8,-0.2,0,-0.2,0]);
         const sharp = new cv.Mat();
         cv.filter2D(result, sharp, -1, kernel);
@@ -371,7 +393,6 @@ export default function ScannerApp() {
 
   const handleDocTypeChange = (type: DocType) => {
     setDocType(type);
-    // Reset ID state when changing type
     setIdSide("front");
     setIdFrontResult(null);
     setIdBackResult(null);
