@@ -9,10 +9,11 @@ interface CaptureScreenProps {
   onDocTypeChange: (type: DocType) => void;
   idSide: IDSide;
   idFrontResult: string | null;
+  onReset: () => void;
 }
 
 export default function CaptureScreen({ 
-  onImageSelected, docType, onDocTypeChange, idSide, idFrontResult 
+  onImageSelected, docType, onDocTypeChange, idSide, idFrontResult, onReset
 }: CaptureScreenProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -162,11 +163,22 @@ export default function CaptureScreen({
         </div>
       )}
 
-      {/* Front preview when capturing back */}
+      {/* Front preview when capturing back + Cancel button */}
       {isCapturingBack && idFrontResult && (
-        <div className="mb-4 p-2 bg-neutral-900 rounded-xl">
-          <p className="text-xs text-neutral-500 text-center mb-2">Frente capturado:</p>
-          <img src={idFrontResult} alt="Frente" className="h-16 rounded-lg opacity-70" />
+        <div className="mb-4 flex flex-col items-center gap-3">
+          <div className="p-2 bg-neutral-900 rounded-xl">
+            <p className="text-xs text-neutral-500 text-center mb-2">Frente capturado:</p>
+            <img src={idFrontResult} alt="Frente" className="h-16 rounded-lg opacity-70" />
+          </div>
+          <button
+            onClick={onReset}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Cancelar y empezar de nuevo
+          </button>
         </div>
       )}
 
