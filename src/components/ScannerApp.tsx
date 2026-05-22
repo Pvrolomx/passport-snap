@@ -277,7 +277,7 @@ export default function ScannerApp() {
           const chF = new cv.Mat(); const bgCh = new cv.Mat(); const normCh = new cv.Mat();
           ch.convertTo(chF, cv.CV_32F);
           cv.GaussianBlur(chF, bgCh, new cv.Size(51, 51), 0);
-          cv.divide(chF, bgCh, normCh, 255.0);
+          cv.divide(chF, bgCh, normCh, 240.0);
           normCh.convertTo(ch, cv.CV_8U);
           chF.delete(); bgCh.delete(); normCh.delete();
         }
@@ -288,7 +288,7 @@ export default function ScannerApp() {
         const floatImg = new cv.Mat();
         result.convertTo(floatImg, cv.CV_32F, 1.0 / 255.0);
         const gammaCorrected = new cv.Mat();
-        cv.pow(floatImg, 0.6, gammaCorrected); // More aggressive gamma
+        cv.pow(floatImg, 0.85, gammaCorrected); // More aggressive gamma
         gammaCorrected.convertTo(result, cv.CV_8U, 255.0);
         floatImg.delete(); gammaCorrected.delete();
 
@@ -302,7 +302,7 @@ export default function ScannerApp() {
         const grayData = gray.data;
         
         const BLACK_THRESHOLD = 80;
-        const WHITE_THRESHOLD = 180;
+        const WHITE_THRESHOLD = 210;
         
         for (let i = 0; i < rows * cols; i++) {
           const lum = grayData[i];
@@ -488,4 +488,5 @@ export default function ScannerApp() {
     </div>
   );
 }
+
 
