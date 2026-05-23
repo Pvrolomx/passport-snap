@@ -133,6 +133,10 @@ export default function ScannerApp() {
       const hierarchy = new cv.Mat();
       cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
+      console.log("=== DETECCIÓN DE DOCUMENTO ===");
+      console.log("Imagen:", w, "x", h, "| minArea:", (w * h * 0.05).toFixed(0));
+      console.log("Contornos encontrados:", contours.size());
+
       let bestCorners: Corner[] | null = null;
       let maxArea = 0;
 
@@ -146,6 +150,8 @@ export default function ScannerApp() {
         const approx = new cv.Mat();
         cv.approxPolyDP(contour, approx, 0.02 * peri, true);
 
+        console.log(`Contorno ${i}: área=${area.toFixed(0)}, vértices=${approx.rows}`);
+
         if (approx.rows === 4 && area > maxArea) {
           maxArea = area;
           const pts: Corner[] = [];
@@ -156,16 +162,20 @@ export default function ScannerApp() {
           const top = pts.slice(0, 2).sort((a, b) => a.x - b.x);
           const bot = pts.slice(2, 4).sort((a, b) => a.x - b.x);
           bestCorners = [top[0], top[1], bot[1], bot[0]];
+          console.log("✅ Documento detectado:", bestCorners);
         }
         approx.delete();
         contour.delete();
       }
 
+      console.log("Resultado:", bestCorners ? "detectado" : "fallback a default");
+
       src.delete(); gray.delete(); blurred.delete();
       edges.delete(); contours.delete(); hierarchy.delete();
 
       return bestCorners;
-    } catch {
+    } catch (e) {
+      console.error("❌ Error en detección:", e);
       return null;
     }
   };
@@ -530,6 +540,7 @@ export default function ScannerApp() {
     </div>
   );
 }
+
 
 
 
