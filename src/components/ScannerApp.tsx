@@ -453,6 +453,7 @@ export default function ScannerApp() {
             onDocTypeChange={handleDocTypeChange}
             idSide={idSide}
             idFrontResult={idFrontResult}
+          onReset={handleReset}
           />
         )}
         {screen === "corners" && sourceImage && (
