@@ -372,7 +372,7 @@ export default function ScannerApp() {
 
     const addPage = (index: number) => {
       if (index >= documentPages.length) {
-        pdf.save(\`documento-\${Date.now()}.pdf\`);
+        pdf.save(`documento-${Date.now()}.pdf`);
         return;
       }
       const img = new Image();
