@@ -260,136 +260,64 @@ export default function ScannerApp() {
     }
   }, [sourceImage, corners, docType, idSide, useFoldMode]);
 
-  // Enhancement modes:
-  // - "document": Magic Color aggressive (black/white point select) for contracts, acts
-  // - "id"/"passport": Soft processing, preserve colors for photos/holograms
+  // Enhancement: LAB + CLAHE + controlled enhancement (all modes)
   const enhanceImage = (cv: any, src: any, type: DocType): any => {
     const result = src.clone();
     try {
-      if (type === "document") {
-        // === DOCUMENT MODE: Aggressive Magic Color ===
-        
-        // 1. Strong illumination normalization
-        const channels = new cv.MatVector();
-        cv.split(result, channels);
-        for (let i = 0; i < 3; i++) {
-          const ch = channels.get(i);
-          const chF = new cv.Mat(); const bgCh = new cv.Mat(); const normCh = new cv.Mat();
-          ch.convertTo(chF, cv.CV_32F);
-          cv.GaussianBlur(chF, bgCh, new cv.Size(51, 51), 0);
-          cv.divide(chF, bgCh, normCh, 240.0);
-          normCh.convertTo(ch, cv.CV_8U);
-          chF.delete(); bgCh.delete(); normCh.delete();
-        }
-        cv.merge(channels, result);
-        channels.delete();
+      // 1. Convert to LAB color space
+      const rgb = new cv.Mat();
+      cv.cvtColor(result, rgb, cv.COLOR_RGBA2RGB);
+      const lab = new cv.Mat();
+      cv.cvtColor(rgb, lab, cv.COLOR_RGB2Lab);
+      rgb.delete();
 
-        // 2. Aggressive gamma for white background
-        const floatImg = new cv.Mat();
-        result.convertTo(floatImg, cv.CV_32F, 1.0 / 255.0);
-        const gammaCorrected = new cv.Mat();
-        cv.pow(floatImg, 0.85, gammaCorrected); // More aggressive gamma
-        gammaCorrected.convertTo(result, cv.CV_8U, 255.0);
-        floatImg.delete(); gammaCorrected.delete();
+      // 2. CLAHE on L channel (clipLimit=3.0, tileGridSize 8x8)
+      const labChannels = new cv.MatVector();
+      cv.split(lab, labChannels);
+      
+      const lChannel = labChannels.get(0);
+      const clahe = new cv.CLAHE(3.0, new cv.Size(8, 8));
+      const lEnhanced = new cv.Mat();
+      clahe.apply(lChannel, lEnhanced);
+      lEnhanced.copyTo(lChannel);
+      lEnhanced.delete();
+      clahe.delete();
 
-        // 3. Magic Color - Black/White point select
-        const gray = new cv.Mat();
-        cv.cvtColor(result, gray, cv.COLOR_RGBA2GRAY);
-        
-        const rows = result.rows;
-        const cols = result.cols;
-        const resultData = result.data;
-        const grayData = gray.data;
-        
-        const BLACK_THRESHOLD = 80;
-        const WHITE_THRESHOLD = 210;
-        
-        for (let i = 0; i < rows * cols; i++) {
-          const lum = grayData[i];
-          const idx = i * 4;
-          
-          if (lum < BLACK_THRESHOLD) {
-            resultData[idx] = 0;
-            resultData[idx + 1] = 0;
-            resultData[idx + 2] = 0;
-          } else if (lum > WHITE_THRESHOLD) {
-            resultData[idx] = 255;
-            resultData[idx + 1] = 255;
-            resultData[idx + 2] = 255;
-          }
-        }
-        gray.delete();
+      cv.merge(labChannels, lab);
+      labChannels.delete();
 
-        // 4. Strong contrast
-        const contrasted = new cv.Mat();
-        result.convertTo(contrasted, -1, 1.1, 5);
-        contrasted.copyTo(result);
-        contrasted.delete();
+      // Convert back to RGB then RGBA
+      const rgbResult = new cv.Mat();
+      cv.cvtColor(lab, rgbResult, cv.COLOR_Lab2RGB);
+      lab.delete();
+      cv.cvtColor(rgbResult, result, cv.COLOR_RGB2RGBA);
+      rgbResult.delete();
 
-        // 5. Strong sharpen for crispy text
-        const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [0,-0.5,0,-0.5,3.0,-0.5,0,-0.5,0]);
-        const sharp = new cv.Mat();
-        cv.filter2D(result, sharp, -1, kernel);
-        sharp.copyTo(result);
-        kernel.delete(); sharp.delete();
+      // 3. Gamma 0.85 (brightens mid-tones without crushing)
+      const floatImg = new cv.Mat();
+      result.convertTo(floatImg, cv.CV_32F, 1.0 / 255.0);
+      const gammaCorrected = new cv.Mat();
+      cv.pow(floatImg, 0.85, gammaCorrected);
+      gammaCorrected.convertTo(result, cv.CV_8U, 255.0);
+      floatImg.delete(); gammaCorrected.delete();
 
-      } else {
-        // === ID/PASSPORT MODE: LAB + CLAHE + controlled enhancement ===
-        
-        // 1. Convert to LAB color space
-        const rgb = new cv.Mat();
-        cv.cvtColor(result, rgb, cv.COLOR_RGBA2RGB);
-        const lab = new cv.Mat();
-        cv.cvtColor(rgb, lab, cv.COLOR_RGB2Lab);
-        rgb.delete();
+      // 4. Contrast: alpha=1.2, beta=5
+      const contrasted = new cv.Mat();
+      result.convertTo(contrasted, -1, 1.2, 5);
+      contrasted.copyTo(result);
+      contrasted.delete();
 
-        // 2. CLAHE on L channel (clipLimit=3.0, tileGridSize 8x8)
-        const labChannels = new cv.MatVector();
-        cv.split(lab, labChannels);
-        
-        const lChannel = labChannels.get(0);
-        const clahe = new cv.CLAHE(3.0, new cv.Size(8, 8));
-        const lEnhanced = new cv.Mat();
-        clahe.apply(lChannel, lEnhanced);
-        lEnhanced.copyTo(lChannel);
-        lEnhanced.delete();
-        clahe.delete();
+      // 5. Sharpen kernel: [-0.5,-0.5,-0.5 / -0.5,5.0,-0.5 / -0.5,-0.5,-0.5]
+      const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [
+        -0.5, -0.5, -0.5,
+        -0.5,  5.0, -0.5,
+        -0.5, -0.5, -0.5
+      ]);
+      const sharp = new cv.Mat();
+      cv.filter2D(result, sharp, -1, kernel);
+      sharp.copyTo(result);
+      kernel.delete(); sharp.delete();
 
-        cv.merge(labChannels, lab);
-        labChannels.delete();
-
-        // Convert back to RGB then RGBA
-        const rgbResult = new cv.Mat();
-        cv.cvtColor(lab, rgbResult, cv.COLOR_Lab2RGB);
-        lab.delete();
-        cv.cvtColor(rgbResult, result, cv.COLOR_RGB2RGBA);
-        rgbResult.delete();
-
-        // 3. Gamma 0.85 (brightens mid-tones without crushing)
-        const floatImg = new cv.Mat();
-        result.convertTo(floatImg, cv.CV_32F, 1.0 / 255.0);
-        const gammaCorrected = new cv.Mat();
-        cv.pow(floatImg, 0.85, gammaCorrected);
-        gammaCorrected.convertTo(result, cv.CV_8U, 255.0);
-        floatImg.delete(); gammaCorrected.delete();
-
-        // 4. Contrast: alpha=1.2, beta=5
-        const contrasted = new cv.Mat();
-        result.convertTo(contrasted, -1, 1.2, 5);
-        contrasted.copyTo(result);
-        contrasted.delete();
-
-        // 5. Sharpen kernel: [-0.5,-0.5,-0.5 / -0.5,5.0,-0.5 / -0.5,-0.5,-0.5]
-        const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [
-          -0.5, -0.5, -0.5,
-          -0.5,  5.0, -0.5,
-          -0.5, -0.5, -0.5
-        ]);
-        const sharp = new cv.Mat();
-        cv.filter2D(result, sharp, -1, kernel);
-        sharp.copyTo(result);
-        kernel.delete(); sharp.delete();
-      }
     } catch (e) { console.warn("Enhancement error:", e); }
     return result;
   };
@@ -487,6 +415,7 @@ export default function ScannerApp() {
     </div>
   );
 }
+
 
 
 
