@@ -117,9 +117,15 @@ export default function ScannerApp() {
 
   const detectDocumentCorners = (cv: any, img: HTMLImageElement, w: number, h: number): Corner[] | null => {
     try {
+      // Redimensionar a max 1000px para reducir ruido y acelerar Canny
+      const maxDim = 1000;
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      const sw = Math.round(w * scale);
+      const sh = Math.round(h * scale);
+
       const canvas = document.createElement("canvas");
-      canvas.width = w; canvas.height = h;
-      canvas.getContext("2d")!.drawImage(img, 0, 0);
+      canvas.width = sw; canvas.height = sh;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, sw, sh);
       const src = cv.imread(canvas);
 
       const gray = new cv.Mat();
@@ -134,7 +140,7 @@ export default function ScannerApp() {
       cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
       console.log("=== DETECCIÓN DE DOCUMENTO ===");
-      console.log("Imagen:", w, "x", h, "| minArea:", (w * h * 0.05).toFixed(0));
+      console.log("Imagen original:", w, "x", h, "| Procesando:", sw, "x", sh, "| scale:", scale.toFixed(3));
       console.log("Contornos encontrados:", contours.size());
 
       let bestCorners: Corner[] | null = null;
@@ -143,7 +149,7 @@ export default function ScannerApp() {
       for (let i = 0; i < contours.size(); i++) {
         const contour = contours.get(i);
         const area = cv.contourArea(contour);
-        const minArea = w * h * 0.05;
+        const minArea = sw * sh * 0.05;
         if (area < minArea) { contour.delete(); continue; }
 
         const peri = cv.arcLength(contour, true);
@@ -162,12 +168,17 @@ export default function ScannerApp() {
           const top = pts.slice(0, 2).sort((a, b) => a.x - b.x);
           const bot = pts.slice(2, 4).sort((a, b) => a.x - b.x);
           bestCorners = [top[0], top[1], bot[1], bot[0]];
-          console.log("✅ Documento detectado:", bestCorners);
+          console.log("✅ Documento detectado (escalado):", bestCorners);
         }
         approx.delete();
         contour.delete();
       }
 
+      // Escalar corners de vuelta a coordenadas originales
+      if (bestCorners) {
+        bestCorners = bestCorners.map(c => ({ x: Math.round(c.x / scale), y: Math.round(c.y / scale) }));
+        console.log("✅ Corners en coordenadas originales:", bestCorners);
+      }
       console.log("Resultado:", bestCorners ? "detectado" : "fallback a default");
 
       src.delete(); gray.delete(); blurred.delete();
@@ -540,6 +551,7 @@ export default function ScannerApp() {
     </div>
   );
 }
+
 
 
 
