@@ -10,10 +10,13 @@ interface CaptureScreenProps {
   idSide: IDSide;
   idFrontResult: string | null;
   onReset: () => void;
+  documentSize: "letter" | "oficio";
+  onDocumentSizeChange: (size: "letter" | "oficio") => void;
 }
 
 export default function CaptureScreen({ 
-  onImageSelected, docType, onDocTypeChange, idSide, idFrontResult, onReset
+  onImageSelected, docType, onDocTypeChange, idSide, idFrontResult, onReset,
+  documentSize, onDocumentSizeChange
 }: CaptureScreenProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -141,6 +144,32 @@ export default function CaptureScreen({
               <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
             Documento
+          </button>
+        </div>
+      )}
+
+      {/* Document size selector */}
+      {isDocument && !isCapturingBack && (
+        <div className="mb-4 flex gap-2 justify-center">
+          <button
+            onClick={() => onDocumentSizeChange("letter")}
+            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${
+              documentSize === "letter"
+                ? "bg-amber-600 text-white"
+                : "bg-neutral-800 text-neutral-400 hover:text-white"
+            }`}
+          >
+            Carta
+          </button>
+          <button
+            onClick={() => onDocumentSizeChange("oficio")}
+            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${
+              documentSize === "oficio"
+                ? "bg-amber-600 text-white"
+                : "bg-neutral-800 text-neutral-400 hover:text-white"
+            }`}
+          >
+            Oficio MX
           </button>
         </div>
       )}
@@ -299,4 +328,5 @@ export default function CaptureScreen({
     </div>
   );
 }
+
 
