@@ -33,6 +33,7 @@ export default function ScannerApp() {
   const [idFrontResult, setIdFrontResult] = useState<string | null>(null);
   const [idBackResult, setIdBackResult] = useState<string | null>(null);
   const [documentPages, setDocumentPages] = useState<string[]>([]);
+  const [documentSize, setDocumentSize] = useState<"letter" | "oficio">("letter");
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.cv && window.cv.Mat) {
@@ -226,9 +227,9 @@ export default function ScannerApp() {
         outW = 1011;
         outH = 638;
       } else if (docType === "document") {
-        // Document: Letter size at 200 DPI (good balance quality/size)
+        // Document: Letter or Oficio at 200 DPI
         outW = 1700;
-        outH = 2200;
+        outH = documentSize === "oficio" ? 2677 : 2200;
       } else {
         // Passport: portrait
         outW = 1232;
@@ -441,11 +442,12 @@ export default function ScannerApp() {
   const handleFinishPDF = () => {
     if (documentPages.length === 0) return;
     const { jsPDF } = require("jspdf");
-    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+    const isOficio = documentSize === "oficio";
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: isOficio ? [215.9, 339.85] : "letter" });
     const pageW = 215.9;
-    const pageH = 279.4;
+    const pageH = isOficio ? 339.85 : 279.4;
     const imgW = 180;
-    const imgH = 233;
+    const imgH = isOficio ? 290 : 233;
     const x = (pageW - imgW) / 2;
     const y = (pageH - imgH) / 2;
 
@@ -513,7 +515,9 @@ export default function ScannerApp() {
             onDocTypeChange={handleDocTypeChange}
             idSide={idSide}
             idFrontResult={idFrontResult}
-          onReset={handleReset}
+            onReset={handleReset}
+            documentSize={documentSize}
+            onDocumentSizeChange={setDocumentSize}
           />
         )}
         {screen === "corners" && sourceImage && (
@@ -551,6 +555,7 @@ export default function ScannerApp() {
     </div>
   );
 }
+
 
 
 
