@@ -32,6 +32,7 @@ export default function ScannerApp() {
   const [idSide, setIdSide] = useState<IDSide>("front");
   const [idFrontResult, setIdFrontResult] = useState<string | null>(null);
   const [idBackResult, setIdBackResult] = useState<string | null>(null);
+  const [documentPages, setDocumentPages] = useState<string[]>([]);
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.cv && window.cv.Mat) {
@@ -255,6 +256,8 @@ export default function ScannerApp() {
         setScreen("result");
       }
     } else {
+      // Document mode: accumulate pages
+      setDocumentPages(prev => [...prev, result]);
       setResultImage(result);
       setScreen("result");
     }
@@ -331,6 +334,56 @@ export default function ScannerApp() {
     setIdSide("front");
     setIdFrontResult(null);
     setIdBackResult(null);
+    setDocumentPages([]);
+  };
+
+  const handleAddPage = () => {
+    setScreen("capture");
+    setSourceImage(null);
+    setCorners([]);
+    setResultImage(null);
+    setOriginalForCompare(null);
+  };
+
+  const handleDeletePage = (index: number) => {
+    setDocumentPages(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      // Update resultImage to last remaining page or null
+      if (updated.length > 0) {
+        setResultImage(updated[updated.length - 1]);
+      } else {
+        setResultImage(null);
+        setScreen("capture");
+      }
+      return updated;
+    });
+  };
+
+  const handleFinishPDF = () => {
+    if (documentPages.length === 0) return;
+    const { jsPDF } = require("jspdf");
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+    const pageW = 215.9;
+    const pageH = 279.4;
+    const imgW = 180;
+    const imgH = 233;
+    const x = (pageW - imgW) / 2;
+    const y = (pageH - imgH) / 2;
+
+    const addPage = (index: number) => {
+      if (index >= documentPages.length) {
+        pdf.save(\`documento-\${Date.now()}.pdf\`);
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        if (index > 0) pdf.addPage();
+        pdf.addImage(documentPages[index], "PNG", x, y, imgW, imgH);
+        addPage(index + 1);
+      };
+      img.src = documentPages[index];
+    };
+    addPage(0);
   };
 
   const handleDocTypeChange = (type: DocType) => {
@@ -405,6 +458,10 @@ export default function ScannerApp() {
             docType={docType}
             idFrontResult={idFrontResult}
             idBackResult={idBackResult}
+            documentPages={documentPages}
+            onAddPage={handleAddPage}
+            onDeletePage={handleDeletePage}
+            onFinishPDF={handleFinishPDF}
           />
         )}
       </main>
@@ -415,6 +472,7 @@ export default function ScannerApp() {
     </div>
   );
 }
+
 
 
 
