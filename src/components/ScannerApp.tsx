@@ -115,6 +115,61 @@ export default function ScannerApp() {
     ];
   };
 
+  const detectDocumentCorners = (cv: any, img: HTMLImageElement, w: number, h: number): Corner[] | null => {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0);
+      const src = cv.imread(canvas);
+
+      const gray = new cv.Mat();
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+      const blurred = new cv.Mat();
+      cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+      const edges = new cv.Mat();
+      cv.Canny(blurred, edges, 75, 200);
+
+      const contours = new cv.MatVector();
+      const hierarchy = new cv.Mat();
+      cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+      let bestCorners: Corner[] | null = null;
+      let maxArea = 0;
+
+      for (let i = 0; i < contours.size(); i++) {
+        const contour = contours.get(i);
+        const area = cv.contourArea(contour);
+        const minArea = w * h * 0.05;
+        if (area < minArea) { contour.delete(); continue; }
+
+        const peri = cv.arcLength(contour, true);
+        const approx = new cv.Mat();
+        cv.approxPolyDP(contour, approx, 0.02 * peri, true);
+
+        if (approx.rows === 4 && area > maxArea) {
+          maxArea = area;
+          const pts: Corner[] = [];
+          for (let j = 0; j < 4; j++) {
+            pts.push({ x: approx.data32S[j * 2], y: approx.data32S[j * 2 + 1] });
+          }
+          pts.sort((a, b) => a.y - b.y);
+          const top = pts.slice(0, 2).sort((a, b) => a.x - b.x);
+          const bot = pts.slice(2, 4).sort((a, b) => a.x - b.x);
+          bestCorners = [top[0], top[1], bot[1], bot[0]];
+        }
+        approx.delete();
+        contour.delete();
+      }
+
+      src.delete(); gray.delete(); blurred.delete();
+      edges.delete(); contours.delete(); hierarchy.delete();
+
+      return bestCorners;
+    } catch {
+      return null;
+    }
+  };
+
   const handleImageSelected = useCallback(
     (img: HTMLImageElement) => {
       setSourceImage(img);
@@ -122,7 +177,10 @@ export default function ScannerApp() {
       const w = img.naturalWidth;
       const h = img.naturalHeight;
       const foldEnabled = docType === "passport" && useFoldMode;
-      setCorners(getDefaultCorners(w, h, docType, foldEnabled));
+
+      const cv = (window as any).cv;
+      const detected = (cv && cv.Mat) ? detectDocumentCorners(cv, img, w, h) : null;
+      setCorners(detected ?? getDefaultCorners(w, h, docType, foldEnabled));
       setScreen("corners");
     },
     [docType, useFoldMode]
@@ -472,6 +530,7 @@ export default function ScannerApp() {
     </div>
   );
 }
+
 
 
 
