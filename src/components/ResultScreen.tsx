@@ -11,10 +11,15 @@ interface ResultScreenProps {
   docType: DocType;
   idFrontResult: string | null;
   idBackResult: string | null;
+  documentPages?: string[];
+  onAddPage?: () => void;
+  onDeletePage?: (i: number) => void;
+  onFinishPDF?: () => void;
 }
 
 export default function ResultScreen({ 
-  resultSrc, originalSrc, onNewScan, docType, idFrontResult, idBackResult 
+  resultSrc, originalSrc, onNewScan, docType, idFrontResult, idBackResult,
+  documentPages = [], onAddPage, onDeletePage, onFinishPDF
 }: ResultScreenProps) {
   const [showOriginal, setShowOriginal] = useState(false);
   const [bwMode, setBwMode] = useState(false);
@@ -253,32 +258,95 @@ export default function ResultScreen({
         ) : null}
       </div>
 
-      <div className="px-4 py-4 border-t border-neutral-800">
-        <div className="flex gap-3">
-          <button onClick={handleDownloadPNG}
-            className="flex-1 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 transition-colors flex items-center justify-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            PNG{hasIDDual && " (2)"}
-          </button>
-          <button onClick={handleDownloadPDF}
-            className={`flex-1 py-3 rounded-xl transition-colors flex items-center justify-center gap-2 ${getButtonColor()}`}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            PDF{hasIDDual && " (ambos)"}
-          </button>
-          <button onClick={handleCopy}
-            className="py-3 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 transition-colors">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="2" />
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="2" />
-            </svg>
-          </button>
+      {/* Document multipágina: thumbnails + controles */}
+      {isDocument && documentPages.length > 0 && (
+        <div className="px-4 pt-3 border-t border-neutral-800">
+          <p className="text-xs text-amber-400 font-medium mb-2">
+            {documentPages.length} {documentPages.length === 1 ? "página" : "páginas"} capturadas
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {documentPages.map((page, i) => (
+              <div key={i} className="relative flex-shrink-0">
+                <img
+                  src={page}
+                  alt={`Página ${i + 1}`}
+                  className={`h-20 rounded-lg border-2 ${i === documentPages.length - 1 ? "border-amber-500" : "border-neutral-700"}`}
+                />
+                <button
+                  onClick={() => onDeletePage?.(i)}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center text-white text-xs font-bold hover:bg-red-500"
+                >
+                  ✕
+                </button>
+                <span className="absolute bottom-1 left-1 text-[9px] text-white bg-black/60 px-1 rounded">
+                  {i + 1}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
+      )}
+
+      <div className="px-4 py-4 border-t border-neutral-800">
+        {isDocument ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-3">
+              <button
+                onClick={onAddPage}
+                className="flex-1 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 transition-colors flex items-center justify-center gap-2"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                Agregar página
+              </button>
+              <button
+                onClick={onFinishPDF}
+                disabled={documentPages.length === 0}
+                className="flex-1 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                PDF ({documentPages.length} {documentPages.length === 1 ? "pág" : "págs"})
+              </button>
+            </div>
+            <button
+              onClick={onNewScan}
+              className="w-full py-2 rounded-xl text-sm text-neutral-500 hover:text-neutral-300 transition-colors"
+            >
+              Descartar todo y empezar de nuevo
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-3">
+            <button onClick={handleDownloadPNG}
+              className="flex-1 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 transition-colors flex items-center justify-center gap-2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              PNG{hasIDDual && " (2)"}
+            </button>
+            <button onClick={handleDownloadPDF}
+              className={`flex-1 py-3 rounded-xl transition-colors flex items-center justify-center gap-2 ${getButtonColor()}`}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              PDF{hasIDDual && " (ambos)"}
+            </button>
+            <button onClick={handleCopy}
+              className="py-3 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 transition-colors">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="2" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
