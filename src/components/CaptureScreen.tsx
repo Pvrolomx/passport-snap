@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import type { DocType, IDSide } from "./ScannerApp";
 
 interface CaptureScreenProps {
@@ -43,9 +43,7 @@ export default function CaptureScreen({
       });
       setStream(mediaStream);
       setCameraActive(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
+      // srcObject se asigna en useEffect cuando el <video> ya existe en el DOM
     } catch (err) {
       alert("No se pudo acceder a la cámara");
     }
@@ -56,6 +54,12 @@ export default function CaptureScreen({
     setStream(null);
     setCameraActive(false);
   };
+
+  useEffect(() => {
+    if (cameraActive && stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [cameraActive, stream]);
 
   const capturePhoto = () => {
     if (!videoRef.current) return;
@@ -295,3 +299,4 @@ export default function CaptureScreen({
     </div>
   );
 }
+
