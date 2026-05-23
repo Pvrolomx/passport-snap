@@ -453,7 +453,6 @@ export default function ScannerApp() {
             onDocTypeChange={handleDocTypeChange}
             idSide={idSide}
             idFrontResult={idFrontResult}
-            onReset={handleReset}
           />
         )}
         {screen === "corners" && sourceImage && (
@@ -476,7 +475,6 @@ export default function ScannerApp() {
             onNewScan={handleReset}
             docType={docType}
             idFrontResult={idFrontResult}
-            onReset={handleReset}
             idBackResult={idBackResult}
           />
         )}
@@ -488,5 +486,6 @@ export default function ScannerApp() {
     </div>
   );
 }
+
 
 
