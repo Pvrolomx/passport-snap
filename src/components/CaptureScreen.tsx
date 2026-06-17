@@ -12,11 +12,12 @@ interface CaptureScreenProps {
   onReset: () => void;
   documentSize: "letter" | "oficio";
   onDocumentSizeChange: (size: "letter" | "oficio") => void;
+  onIDFrontOnly: () => void;
 }
 
 export default function CaptureScreen({ 
   onImageSelected, docType, onDocTypeChange, idSide, idFrontResult, onReset,
-  documentSize, onDocumentSizeChange
+  documentSize, onDocumentSizeChange, onIDFrontOnly
 }: CaptureScreenProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -196,22 +197,30 @@ export default function CaptureScreen({
         </div>
       )}
 
-      {/* Front preview when capturing back + Cancel button */}
+      {/* Front preview when capturing back + side options */}
       {isCapturingBack && idFrontResult && (
         <div className="mb-4 flex flex-col items-center gap-3">
           <div className="p-2 bg-neutral-900 rounded-xl">
             <p className="text-xs text-neutral-500 text-center mb-2">Frente capturado:</p>
             <img src={idFrontResult} alt="Frente" className="h-16 rounded-lg opacity-70" />
           </div>
-          <button
-            onClick={onReset}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-colors"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Cancelar y empezar de nuevo
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onIDFrontOnly}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-green-800 hover:bg-green-700 text-green-200 rounded-lg transition-colors"
+            >
+              Solo frente
+            </button>
+            <button
+              onClick={onReset}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-colors"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Cancelar
+            </button>
+          </div>
         </div>
       )}
 
@@ -328,5 +337,6 @@ export default function CaptureScreen({
     </div>
   );
 }
+
 
 
