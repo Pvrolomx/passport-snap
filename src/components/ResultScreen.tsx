@@ -96,28 +96,39 @@ export default function ResultScreen({
     const pageW = 215.9;
     const pageH = 279.4;
     
-    if (hasIDDual && displayFront && displayBack) {
-      // INE: 85.6 × 54mm ISO/IEC 7810 ID-1 (tamaño real 1:1), gap 12mm, no labels
+    if (isID && displayFront) {
+      // INE: 85.6 × 54mm ISO/IEC 7810 ID-1 (tamaño real 1:1)
       const imgW = 85.6;
       const imgH = 54;
-      const gap = 12;
       const x = (pageW - imgW) / 2;
-      const totalH = imgH * 2 + gap;
-      const startY = (pageH - totalH) / 2;
-      
-      const imgFront = new Image();
-      imgFront.onload = () => {
-        pdf.addImage(displayFront, "PNG", x, startY, imgW, imgH);
-        
-        const imgBack = new Image();
-        imgBack.onload = () => {
-          const backY = startY + imgH + gap;
-          pdf.addImage(displayBack, "PNG", x, backY, imgW, imgH);
+
+      if (hasIDDual && displayBack) {
+        // Ambos lados: frente + reverso con gap 12mm
+        const gap = 12;
+        const totalH = imgH * 2 + gap;
+        const startY = (pageH - totalH) / 2;
+        const imgFront = new Image();
+        imgFront.onload = () => {
+          pdf.addImage(displayFront, "PNG", x, startY, imgW, imgH);
+          const imgBack = new Image();
+          imgBack.onload = () => {
+            const backY = startY + imgH + gap;
+            pdf.addImage(displayBack, "PNG", x, backY, imgW, imgH);
+            pdf.save(`ine-scan-${Date.now()}.pdf`);
+          };
+          imgBack.src = displayBack;
+        };
+        imgFront.src = displayFront;
+      } else {
+        // Solo frente: centrado en página
+        const y = (pageH - imgH) / 2;
+        const img = new Image();
+        img.onload = () => {
+          pdf.addImage(displayFront, "PNG", x, y, imgW, imgH);
           pdf.save(`ine-scan-${Date.now()}.pdf`);
         };
-        imgBack.src = displayBack;
-      };
-      imgFront.src = displayFront;
+        img.src = displayFront;
+      }
     } else if (displayResult) {
       let imgW: number, imgH: number;
       if (isDocument) {
