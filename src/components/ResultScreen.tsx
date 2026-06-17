@@ -97,9 +97,9 @@ export default function ResultScreen({
     const pageH = 279.4;
     
     if (hasIDDual && displayFront && displayBack) {
-      // INE: 70 × 44mm (ratio 1.585), gap 12mm, no labels
-      const imgW = 70;
-      const imgH = 44;
+      // INE: 85.6 × 54mm ISO/IEC 7810 ID-1 (tamaño real 1:1), gap 12mm, no labels
+      const imgW = 85.6;
+      const imgH = 54;
       const gap = 12;
       const x = (pageW - imgW) / 2;
       const totalH = imgH * 2 + gap;
@@ -349,4 +349,5 @@ export default function ResultScreen({
     </div>
   );
 }
+
 
