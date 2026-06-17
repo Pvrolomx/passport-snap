@@ -425,6 +425,11 @@ export default function ScannerApp() {
     setOriginalForCompare(null);
   };
 
+  const handleIDFrontOnly = useCallback(() => {
+    setResultImage(idFrontResult);
+    setScreen("result");
+  }, [idFrontResult]);
+
   const handleDeletePage = (index: number) => {
     setDocumentPages(prev => {
       const updated = prev.filter((_, i) => i !== index);
@@ -518,6 +523,7 @@ export default function ScannerApp() {
             onReset={handleReset}
             documentSize={documentSize}
             onDocumentSizeChange={setDocumentSize}
+            onIDFrontOnly={handleIDFrontOnly}
           />
         )}
         {screen === "corners" && sourceImage && (
@@ -555,6 +561,7 @@ export default function ScannerApp() {
     </div>
   );
 }
+
 
 
 
