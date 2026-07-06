@@ -136,6 +136,11 @@ export default function ScannerApp() {
       const edges = new cv.Mat();
       cv.Canny(blurred, edges, 75, 200);
 
+      // Cerrar huecos en los bordes para que findContours detecte contornos completos
+      const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
+      cv.morphologyEx(edges, edges, cv.MORPH_CLOSE, kernel);
+      kernel.delete();
+
       const contours = new cv.MatVector();
       const hierarchy = new cv.Mat();
       cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
