@@ -395,7 +395,7 @@ export default function ScannerApp() {
       // INE/Pasaporte skip this to preserve photo mid-tones.
       if (type === "document") {
         const data = result.data;
-        const WHITE_THRESHOLD = 200; // pixels con luminosidad > 200 → blanco
+        const WHITE_THRESHOLD = 190; // pixels con luminosidad > 190 → blanco
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i], g = data[i + 1], b = data[i + 2];
           const lum = 0.299 * r + 0.587 * g + 0.114 * b;
