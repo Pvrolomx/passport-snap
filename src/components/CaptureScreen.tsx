@@ -236,7 +236,7 @@ export default function CaptureScreen({
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div
               className={`border-2 border-dashed border-white/50 rounded-lg ${
-                isDocument ? "w-[92%] aspect-[0.77/1]" : isID ? "w-[92%] aspect-[1.586/1]" : "w-[92%] aspect-[0.7/1]"
+                isDocument ? "h-[90%] aspect-[0.77/1]" : isID ? "w-[92%] aspect-[1.586/1]" : "h-[90%] aspect-[0.7/1]"
               }`}
             />
           </div>
