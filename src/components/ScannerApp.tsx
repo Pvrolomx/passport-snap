@@ -390,6 +390,23 @@ export default function ScannerApp() {
       contrasted.copyTo(result);
       contrasted.delete();
 
+      // 4b. White point correction (documento only): push light grays to pure white
+      // so the paper background comes out clean instead of grayish/dirty.
+      // INE/Pasaporte skip this to preserve photo mid-tones.
+      if (type === "document") {
+        const data = result.data;
+        const WHITE_THRESHOLD = 200; // pixels con luminosidad > 200 → blanco
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          if (lum > WHITE_THRESHOLD) {
+            data[i] = 255;
+            data[i + 1] = 255;
+            data[i + 2] = 255;
+          }
+        }
+      }
+
       // 5. Sharpen kernel: [-0.5,-0.5,-0.5 / -0.5,5.0,-0.5 / -0.5,-0.5,-0.5]
       const kernel = cv.matFromArray(3, 3, cv.CV_32FC1, [
         -0.5, -0.5, -0.5,
