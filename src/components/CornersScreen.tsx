@@ -7,7 +7,7 @@ interface CornersScreenProps {
   image: HTMLImageElement;
   corners: Corner[];
   onCornersChange: (corners: Corner[]) => void;
-  onScan: () => void;
+  onScan: (cropOnly: boolean) => void;
   onBack: () => void;
   docType: DocType;
   foldMode: boolean;
@@ -192,9 +192,9 @@ export default function CornersScreen({
 
   const handlePointerUp = () => setDragging(null);
 
-  const handleScan = () => {
+  const handleScan = (cropOnly: boolean) => {
     setProcessing(true);
-    requestAnimationFrame(() => { onScan(); setProcessing(false); });
+    requestAnimationFrame(() => { onScan(cropOnly); setProcessing(false); });
   };
 
   const isFoldPoint = (i: number) => isPassport && foldMode && (i === 4 || i === 5);
@@ -272,7 +272,7 @@ export default function CornersScreen({
       </div>
 
       <div className="px-4 py-4 border-t border-neutral-800 space-y-2">
-        <button onClick={handleScan} disabled={processing}
+        <button onClick={() => handleScan(false)} disabled={processing}
           className={`w-full py-3 rounded-xl transition-colors flex items-center justify-center gap-2 text-lg font-medium ${getButtonClass()} disabled:opacity-50`}>
           {processing ? (
             <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full spin-scan" />Procesando...</>
@@ -284,6 +284,13 @@ export default function CornersScreen({
             {isID && idSide === "front" ? "Escanear Frente" : isID ? "Escanear Reverso" : "Escanear"}
             </>
           )}
+        </button>
+        <button onClick={() => handleScan(true)} disabled={processing}
+          className="w-full py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm font-medium bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white disabled:opacity-50">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Solo recortar (sin ajuste de color)
         </button>
         <p className="text-xs text-neutral-500 text-center">
           {isPassport && foldMode

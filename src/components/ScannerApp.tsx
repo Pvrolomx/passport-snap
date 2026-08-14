@@ -213,7 +213,7 @@ export default function ScannerApp() {
     [docType, useFoldMode]
   );
 
-  const processImage = (sourceImg: HTMLImageElement, cornersPts: Corner[]): string | null => {
+  const processImage = (sourceImg: HTMLImageElement, cornersPts: Corner[], cropOnly = false): string | null => {
     const cv = window.cv;
     if (!cv || !cv.Mat) return null;
 
@@ -268,8 +268,8 @@ export default function ScannerApp() {
         const warpedBot = new cv.Mat();
         cv.warpPerspective(src, warpedBot, mBot, new cv.Size(outW, halfH), cv.INTER_CUBIC);
 
-        const enhTop = enhanceImage(cv, warpedTop, docType);
-        const enhBot = enhanceImage(cv, warpedBot, docType);
+        const enhTop = cropOnly ? warpedTop : enhanceImage(cv, warpedTop, docType);
+        const enhBot = cropOnly ? warpedBot : enhanceImage(cv, warpedBot, docType);
 
         finalCanvas = document.createElement("canvas");
         finalCanvas.width = outW;
@@ -289,7 +289,7 @@ export default function ScannerApp() {
 
         srcTop.delete(); dstTop.delete(); mTop.delete(); warpedTop.delete();
         srcBot.delete(); dstBot.delete(); mBot.delete(); warpedBot.delete();
-        enhTop.delete(); enhBot.delete();
+        if (!cropOnly) { enhTop.delete(); enhBot.delete(); }
       } else {
         const srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
           cornersPts[0].x, cornersPts[0].y, cornersPts[1].x, cornersPts[1].y,
@@ -301,13 +301,14 @@ export default function ScannerApp() {
         const M = cv.getPerspectiveTransform(srcPts, dstPts);
         const warped = new cv.Mat();
         cv.warpPerspective(src, warped, M, new cv.Size(outW, outH), cv.INTER_CUBIC);
-        const enhanced = enhanceImage(cv, warped, docType);
+        const enhanced = cropOnly ? warped : enhanceImage(cv, warped, docType);
 
         finalCanvas = document.createElement("canvas");
         finalCanvas.width = outW; finalCanvas.height = outH;
         cv.imshow(finalCanvas, enhanced);
 
-        srcPts.delete(); dstPts.delete(); M.delete(); warped.delete(); enhanced.delete();
+        srcPts.delete(); dstPts.delete(); M.delete(); warped.delete();
+        if (!cropOnly) enhanced.delete();
       }
 
       src.delete();
@@ -319,10 +320,10 @@ export default function ScannerApp() {
     }
   };
 
-  const handleScan = useCallback(() => {
+  const handleScan = useCallback((cropOnly = false) => {
     if (!sourceImage) return;
-    
-    const result = processImage(sourceImage, corners);
+
+    const result = processImage(sourceImage, corners, cropOnly);
     if (!result) {
       alert("Error procesando. Intenta de nuevo.");
       return;
