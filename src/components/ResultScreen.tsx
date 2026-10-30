@@ -14,12 +14,13 @@ interface ResultScreenProps {
   documentPages?: string[];
   onAddPage?: () => void;
   onDeletePage?: (i: number) => void;
+  onMovePage?: (i: number, dir: number) => void;
   onFinishPDF?: () => void;
 }
 
 export default function ResultScreen({ 
   resultSrc, originalSrc, onNewScan, docType, idFrontResult, idBackResult,
-  documentPages = [], onAddPage, onDeletePage, onFinishPDF
+  documentPages = [], onAddPage, onDeletePage, onMovePage, onFinishPDF
 }: ResultScreenProps) {
   const [showOriginal, setShowOriginal] = useState(false);
   const [bwMode, setBwMode] = useState(false);
@@ -277,21 +278,41 @@ export default function ResultScreen({
           </p>
           <div className="flex gap-2 overflow-x-auto pb-2">
             {documentPages.map((page, i) => (
-              <div key={i} className="relative flex-shrink-0">
-                <img
-                  src={page}
-                  alt={`Página ${i + 1}`}
-                  className={`h-20 rounded-lg border-2 ${i === documentPages.length - 1 ? "border-amber-500" : "border-neutral-700"}`}
-                />
-                <button
-                  onClick={() => onDeletePage?.(i)}
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center text-white text-xs font-bold hover:bg-red-500"
-                >
-                  ✕
-                </button>
-                <span className="absolute bottom-1 left-1 text-[9px] text-white bg-black/60 px-1 rounded">
-                  {i + 1}
-                </span>
+              <div key={i} className="flex-shrink-0 flex flex-col items-center gap-1 pt-1.5">
+                <div className="relative">
+                  <img
+                    src={page}
+                    alt={`Página ${i + 1}`}
+                    className={`h-20 rounded-lg border-2 ${i === documentPages.length - 1 ? "border-amber-500" : "border-neutral-700"}`}
+                  />
+                  <button
+                    onClick={() => onDeletePage?.(i)}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center text-white text-xs font-bold hover:bg-red-500"
+                  >
+                    ✕
+                  </button>
+                  <span className="absolute bottom-1 left-1 text-[9px] text-white bg-black/60 px-1 rounded">
+                    {i + 1}
+                  </span>
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => onMovePage?.(i, -1)}
+                    disabled={i === 0}
+                    aria-label="Mover a la izquierda"
+                    className="w-7 h-6 rounded bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-30 flex items-center justify-center text-xs"
+                  >
+                    ◀
+                  </button>
+                  <button
+                    onClick={() => onMovePage?.(i, 1)}
+                    disabled={i === documentPages.length - 1}
+                    aria-label="Mover a la derecha"
+                    className="w-7 h-6 rounded bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-30 flex items-center justify-center text-xs"
+                  >
+                    ▶
+                  </button>
+                </div>
               </div>
             ))}
           </div>

@@ -467,6 +467,16 @@ export default function ScannerApp() {
     });
   };
 
+  const handleMovePage = (index: number, dir: number) => {
+    setDocumentPages(prev => {
+      const target = index + dir;
+      if (target < 0 || target >= prev.length) return prev;
+      const updated = [...prev];
+      [updated[index], updated[target]] = [updated[target], updated[index]];
+      return updated;
+    });
+  };
+
   const handleFinishPDF = () => {
     if (documentPages.length === 0) return;
     const { jsPDF } = require("jspdf");
@@ -573,6 +583,7 @@ export default function ScannerApp() {
             documentPages={documentPages}
             onAddPage={handleAddPage}
             onDeletePage={handleDeletePage}
+            onMovePage={handleMovePage}
             onFinishPDF={handleFinishPDF}
           />
         )}
