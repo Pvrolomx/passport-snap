@@ -228,17 +228,17 @@ export default function ScannerApp() {
       let outW: number, outH: number;
       
       if (docType === "id") {
-        // ID card: 85.6mm × 54mm at 300 DPI
-        outW = 1011;
-        outH = 638;
+        // ID card: 85.6mm × 54mm, +10% proporcional (~330 DPI)
+        outW = 1112;
+        outH = 702;
       } else if (docType === "document") {
         // Document: Letter or Oficio at 200 DPI
         outW = 1700;
         outH = documentSize === "oficio" ? 2677 : 2200;
       } else {
-        // Passport: portrait
-        outW = 1232;
-        outH = 1750;
+        // Passport: portrait, +10% proporcional
+        outW = 1355;
+        outH = 1925;
       }
 
       let finalCanvas: HTMLCanvasElement;
