@@ -311,6 +311,24 @@ export default function ScannerApp() {
         if (!cropOnly) enhanced.delete();
       }
 
+      // Esquinas redondeadas (pasaporte e INE): disimula el recorte, sobre todo con
+      // fondo oscuro, e imita las esquinas reales de una tarjeta. Documento queda recto.
+      if (docType !== "document") {
+        const rctx = finalCanvas.getContext("2d")!;
+        const fw = finalCanvas.width, fh = finalCanvas.height;
+        const r = Math.round(Math.min(fw, fh) * (docType === "id" ? 0.06 : 0.03));
+        rctx.globalCompositeOperation = "destination-in";
+        rctx.beginPath();
+        rctx.moveTo(r, 0);
+        rctx.arcTo(fw, 0, fw, fh, r);
+        rctx.arcTo(fw, fh, 0, fh, r);
+        rctx.arcTo(0, fh, 0, 0, r);
+        rctx.arcTo(0, 0, fw, 0, r);
+        rctx.closePath();
+        rctx.fill();
+        rctx.globalCompositeOperation = "source-over";
+      }
+
       src.delete();
       return finalCanvas.toDataURL("image/png");
     } catch (e) {
