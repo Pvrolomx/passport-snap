@@ -477,6 +477,16 @@ export default function ScannerApp() {
     });
   };
 
+  // Deshacer el escaneo y volver a la pantalla de puntos conservando imagen y corners.
+  // En documento quita la página recién agregada para que al re-escanear la reemplace.
+  const handleBackToCorners = () => {
+    if (!sourceImage || corners.length === 0) return;
+    if (docType === "document") {
+      setDocumentPages(prev => prev.slice(0, -1));
+    }
+    setScreen("corners");
+  };
+
   const handleFinishPDF = () => {
     if (documentPages.length === 0) return;
     const { jsPDF } = require("jspdf");
@@ -584,6 +594,7 @@ export default function ScannerApp() {
             onAddPage={handleAddPage}
             onDeletePage={handleDeletePage}
             onMovePage={handleMovePage}
+            onReadjust={handleBackToCorners}
             onFinishPDF={handleFinishPDF}
           />
         )}

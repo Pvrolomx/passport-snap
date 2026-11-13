@@ -15,12 +15,13 @@ interface ResultScreenProps {
   onAddPage?: () => void;
   onDeletePage?: (i: number) => void;
   onMovePage?: (i: number, dir: number) => void;
+  onReadjust?: () => void;
   onFinishPDF?: () => void;
 }
 
 export default function ResultScreen({ 
   resultSrc, originalSrc, onNewScan, docType, idFrontResult, idBackResult,
-  documentPages = [], onAddPage, onDeletePage, onMovePage, onFinishPDF
+  documentPages = [], onAddPage, onDeletePage, onMovePage, onReadjust, onFinishPDF
 }: ResultScreenProps) {
   const [showOriginal, setShowOriginal] = useState(false);
   const [bwMode, setBwMode] = useState(false);
@@ -344,6 +345,18 @@ export default function ResultScreen({
                 PDF ({documentPages.length} {documentPages.length === 1 ? "pág" : "págs"})
               </button>
             </div>
+            {onReadjust && (
+              <button
+                onClick={onReadjust}
+                className="w-full py-2 rounded-xl bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M9 14L4 9l5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M4 9h11a5 5 0 015 5v1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Deshacer última página y reajustar
+              </button>
+            )}
             <button
               onClick={onNewScan}
               className="w-full py-2 rounded-xl text-sm text-neutral-500 hover:text-neutral-300 transition-colors"
@@ -352,7 +365,20 @@ export default function ResultScreen({
             </button>
           </div>
         ) : (
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-2">
+            {!isID && onReadjust && (
+              <button
+                onClick={onReadjust}
+                className="w-full py-2 rounded-xl bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M9 14L4 9l5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M4 9h11a5 5 0 015 5v1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Deshacer y volver a los puntos
+              </button>
+            )}
+            <div className="flex gap-3">
             <button onClick={handleDownloadPNG}
               className="flex-1 py-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 transition-colors flex items-center justify-center gap-2">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -375,6 +401,7 @@ export default function ResultScreen({
                 <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="2" />
               </svg>
             </button>
+            </div>
           </div>
         )}
       </div>
