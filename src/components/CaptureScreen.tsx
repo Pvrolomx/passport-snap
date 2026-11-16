@@ -13,11 +13,13 @@ interface CaptureScreenProps {
   documentSize: "letter" | "oficio";
   onDocumentSizeChange: (size: "letter" | "oficio") => void;
   onIDFrontOnly: () => void;
+  documentPageCount?: number;
+  onCancelAddPage?: () => void;
 }
 
-export default function CaptureScreen({ 
+export default function CaptureScreen({
   onImageSelected, docType, onDocTypeChange, idSide, idFrontResult, onReset,
-  documentSize, onDocumentSizeChange, onIDFrontOnly
+  documentSize, onDocumentSizeChange, onIDFrontOnly, documentPageCount = 0, onCancelAddPage
 }: CaptureScreenProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -171,6 +173,24 @@ export default function CaptureScreen({
             }`}
           >
             Oficio MX
+          </button>
+        </div>
+      )}
+
+      {/* Volver a las páginas ya capturadas (al cancelar "Agregar página") */}
+      {isDocument && !isCapturingBack && documentPageCount > 0 && onCancelAddPage && (
+        <div className="mb-4 flex items-center gap-3">
+          <span className="text-xs text-amber-400 font-medium">
+            {documentPageCount} {documentPageCount === 1 ? "página" : "páginas"} ya capturadas
+          </span>
+          <button
+            onClick={() => { stopCamera(); onCancelAddPage(); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-neutral-200 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Volver a las páginas
           </button>
         </div>
       )}

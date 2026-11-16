@@ -466,6 +466,13 @@ export default function ScannerApp() {
     setOriginalForCompare(null);
   };
 
+  // Cancelar "Agregar página" y volver al resultado sin perder las páginas ya escaneadas.
+  const handleCancelAddPage = () => {
+    if (documentPages.length === 0) return;
+    setResultImage(documentPages[documentPages.length - 1]);
+    setScreen("result");
+  };
+
   const handleIDFrontOnly = useCallback(() => {
     setResultImage(idFrontResult);
     setScreen("result");
@@ -585,6 +592,8 @@ export default function ScannerApp() {
             documentSize={documentSize}
             onDocumentSizeChange={setDocumentSize}
             onIDFrontOnly={handleIDFrontOnly}
+            documentPageCount={documentPages.length}
+            onCancelAddPage={handleCancelAddPage}
           />
         )}
         {screen === "corners" && sourceImage && (
